@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-URL="${TRANSLATOR_HEALTH_URL:-http://127.0.0.1:3002/healthz}"
+URL="${TRANSLATOR_HEALTH_URL:-http://127.0.0.1:3000/healthz}"
 TMP="$(mktemp)"
 trap 'rm -f "$TMP"' EXIT
 

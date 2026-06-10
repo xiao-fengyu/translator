@@ -4,7 +4,7 @@
 
 ```text
 Codex CLI
-  -> http://127.0.0.1:3002/v1/responses
+  -> http://127.0.0.1:3000/v1/responses
   -> translator
   -> https://openclawroot.com/v1/chat/completions
 ```
@@ -30,12 +30,12 @@ GitHub：`https://github.com/xiao-fengyu/translator`
 
 ```text
 codex-translator.service: enabled / active
-listen: 127.0.0.1:3002
+listen: 127.0.0.1:3000
 upstream: https://openclawroot.com/v1
 model: claude-opus-4-7
 ```
 
-NewAPI 当前仍保留在本机，但 Codex 主链路已经不经过 NewAPI。
+NewAPI 已被完全替换：translator 现监听原 NewAPI 端口 3000，NewAPI 容器和数据已删除。
 
 ## Repository Layout
 
@@ -84,7 +84,7 @@ Example fields:
 
 ```bash
 TRANSLATOR_HOST=127.0.0.1
-TRANSLATOR_PORT=3002
+TRANSLATOR_PORT=3000
 UPSTREAM_BASE_URL=https://openclawroot.com/v1
 UPSTREAM_API_KEY=replace-me
 TRANSLATOR_MODELS=claude-opus-4-7,gpt-5.5,qwen3.6-plus,gemini-2.5-flash
@@ -108,7 +108,7 @@ model_provider = "translator"
 
 [model_providers.translator]
 name = "Local Responses Translator"
-base_url = "http://127.0.0.1:3002/v1"
+base_url = "http://127.0.0.1:3000/v1"
 wire_api = "responses"
 ```
 
@@ -161,7 +161,7 @@ Helper scripts:
 ./scripts/stop.sh
 ```
 
-Do not run manual and systemd instances at the same time on port `3002`.
+Do not run manual and systemd instances at the same time on port `3000`.
 
 ## Health Check
 
@@ -178,7 +178,7 @@ translator healthy: codex-responses-translator 0.1.0
 Direct HTTP check:
 
 ```bash
-curl http://127.0.0.1:3002/healthz
+curl http://127.0.0.1:3000/healthz
 ```
 
 Expected JSON:
@@ -190,7 +190,7 @@ Expected JSON:
 Override health URL when needed:
 
 ```bash
-TRANSLATOR_HEALTH_URL=http://127.0.0.1:3002/healthz npm run healthcheck
+TRANSLATOR_HEALTH_URL=http://127.0.0.1:3000/healthz npm run healthcheck
 ```
 
 ## Validation
@@ -278,13 +278,13 @@ journalctl -u codex-translator.service -f
 Check port:
 
 ```bash
-ss -ltnp | grep ':3002'
+ss -ltnp | grep ':3000'
 ```
 
 Check Codex provider:
 
 ```bash
-grep -E '^(model|model_provider) =|\[model_providers\.translator\]|base_url = "http://127.0.0.1:3002' ~/.codex/config.toml
+grep -E '^(model|model_provider) =|\[model_providers\.translator\]|base_url = "http://127.0.0.1:3000' ~/.codex/config.toml
 ```
 
 Run Codex diagnostics:
@@ -296,36 +296,29 @@ codex doctor --summary
 Common symptoms:
 
 - `429 Too Many Requests`: upstream model/channel rate limit; wait or switch model.
-- `connection refused 127.0.0.1:3002`: translator service is down or port conflict exists.
+- `connection refused 127.0.0.1:3000`: translator service is down or port conflict exists.
 - Codex chats but will not edit files: tool-call translation is broken or service is running old code; restart `codex-translator.service` and rerun tests.
 - Secret printed in logs: rotate upstream key and inspect `.env`; do not commit runtime logs.
 
+## NewAPI Replacement
+
+NewAPI has been fully replaced. Completed 2026-06-10:
+
+1. Translator verified on port 3002, then migrated to port 3000.
+2. Codex configured to use translator provider.
+3. NewAPI Docker container stopped and removed.
+4. NewAPI process terminated.
+5. Translator port changed to 3000 (taking over NewAPI's former port).
+6. `/data/docker/new-api` data directory deleted (no backup, user confirmed skip).
+
+Current architecture:
+```
+Codex CLI → translator (127.0.0.1:3000) → https://openclawroot.com/v1
+```
+
+**Rollback note**: NewAPI data has been deleted. To restore the old architecture, you would need to reinstall NewAPI, reconfigure channels, and switch Codex back. There is no database backup.
+
 ## Rollback
-
-Rollback Codex to old NewAPI provider if needed:
-
-1. Edit `~/.codex/config.toml`.
-2. Change:
-
-```toml
-model_provider = "newapi"
-```
-
-3. Ensure the old provider block exists:
-
-```toml
-[model_providers.newapi]
-name = "NewAPI"
-base_url = "http://127.0.0.1:3000/v1"
-wire_api = "responses"
-```
-
-4. Verify:
-
-```bash
-codex doctor --summary
-codex exec --ephemeral --skip-git-repo-check -C /data/workspace 'Reply exactly: pong'
-```
 
 Rollback translator code:
 
@@ -338,6 +331,8 @@ npm run healthcheck
 ```
 
 Do not delete NewAPI until translator has been stable long enough and the user explicitly confirms. If NewAPI is ever stopped, back up first:
+
+> NewAPI has been fully replaced. See [NewAPI Replacement](#newapi-replacement) below for details and rollback instructions.
 
 ```bash
 tar -czf /data/docker/new-api-backup-$(date +%Y%m%d-%H%M%S).tar.gz /data/docker/new-api
@@ -385,6 +380,5 @@ Ignored runtime files:
 ## Operational Rules
 
 - Do not restart OpenClaw Gateway for this project unless the user explicitly asks.
-- Do not stop or delete NewAPI without a separate confirmation and backup.
 - Do not print or commit API keys.
 - Prefer small changes followed by `npm run check`, `npm test`, and `npm run healthcheck`.

@@ -40,7 +40,7 @@ function normalizeBaseUrl(url: string): string {
 
 export const config = {
   host: process.env.TRANSLATOR_HOST || '127.0.0.1',
-  port: optionalInt('TRANSLATOR_PORT', 3002),
+  port: optionalInt('TRANSLATOR_PORT', 3000),
   upstreamBaseUrl: normalizeBaseUrl(required('UPSTREAM_BASE_URL')),
   upstreamApiKey: required('UPSTREAM_API_KEY'),
   upstreamTimeoutMs: optionalInt('UPSTREAM_TIMEOUT_MS', 120_000),
