@@ -3,6 +3,7 @@ import { config } from './config.ts';
 import { responsesToChat } from './translators/responses-to-chat.ts';
 import { chatToResponses } from './translators/chat-to-responses.ts';
 import { makeResponsesStream } from './translators/stream-events.ts';
+import { toCompactResponse } from './translators/compact-response.ts';
 import { callChatCompletions, fetchModels } from './upstream/openai-compatible.ts';
 import {
   makeInvalidJsonError,
@@ -91,7 +92,7 @@ async function handleChatProxy(req: http.IncomingMessage, res: http.ServerRespon
   else res.end();
 }
 
-async function handleResponses(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+async function handleResponsesRequest(req: http.IncomingMessage, res: http.ServerResponse, compact = false): Promise<void> {
   let responsesRequest: unknown;
   try {
     responsesRequest = await readJson(req);
@@ -138,7 +139,17 @@ async function handleResponses(req: http.IncomingMessage, res: http.ServerRespon
     sendTranslatorError(res, makeInvalidUpstreamJsonError(error));
     return;
   }
-  sendJson(res, 200, chatToResponses(chatResponse, chatRequest.model));
+
+  const response = chatToResponses(chatResponse, chatRequest.model);
+  sendJson(res, 200, compact ? toCompactResponse(response) : response);
+}
+
+async function handleResponses(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  await handleResponsesRequest(req, res, false);
+}
+
+async function handleResponsesCompact(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  await handleResponsesRequest(req, res, true);
 }
 
 async function router(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
@@ -161,6 +172,11 @@ async function router(req: http.IncomingMessage, res: http.ServerResponse): Prom
 
   if (req.method === 'POST' && url.pathname === '/v1/responses') {
     await handleResponses(req, res);
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/v1/responses/compact') {
+    await handleResponsesCompact(req, res);
     return;
   }
 

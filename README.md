@@ -229,6 +229,7 @@ Implemented routes:
 - `GET /healthz`
 - `GET /v1/models`
 - `POST /v1/responses`
+- `POST /v1/responses/compact`
 - `POST /v1/chat/completions` pass-through
 
 Implemented translation:
@@ -247,7 +248,7 @@ Implemented translation:
 
 Known limitations:
 
-- `/v1/responses/compact` is not implemented.
+- `/v1/responses/compact` is implemented as a minimal compatibility shape, not full OpenAI compaction semantics.
 - Image and multimodal input are not implemented.
 - Full conversation store semantics are not implemented.
 - Streaming mid-flight failures emit `response.failed`, but still use a minimal error payload.
@@ -367,6 +368,7 @@ Ignored runtime files:
 - `8a0a5d9` — Mixed content + tool-call test added by Codex.
 - `b9d0e07` — Streamed tool-call event test added by Codex.
 - `current` — Non-streaming error mapping hardened for upstream HTTP, timeout, connection, and JSON failures.
+- `current` — Added minimal `POST /v1/responses/compact` compatibility route.
 
 ## Operational Rules
 
