@@ -4,6 +4,7 @@ import { responsesToChat } from './translators/responses-to-chat.ts';
 import { chatToResponses } from './translators/chat-to-responses.ts';
 import { makeResponsesStream } from './translators/stream-events.ts';
 import { toCompactResponse } from './translators/compact-response.ts';
+import { saveResponseContext } from './response-context-store.ts';
 import { callChatCompletions, fetchModels } from './upstream/openai-compatible.ts';
 import {
   makeInvalidJsonError,
@@ -141,6 +142,7 @@ async function handleResponsesRequest(req: http.IncomingMessage, res: http.Serve
   }
 
   const response = chatToResponses(chatResponse, chatRequest.model);
+  saveResponseContext(response.id, chatRequest.messages);
   sendJson(res, 200, compact ? toCompactResponse(response) : response);
 }
 

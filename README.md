@@ -239,6 +239,7 @@ Implemented translation:
 - Responses `tools` / `tool_choice` to Chat Completions tools.
 - Responses `function_call` history to Chat Completions assistant `tool_calls`.
 - Responses `function_call_output` to Chat Completions tool messages.
+- Minimal in-memory `previous_response_id` reuse for recent non-streaming conversations in the same translator process.
 - Chat Completions text to Responses `message` / `output_text`.
 - Chat Completions `tool_calls` to Responses `function_call` output items.
 - Streaming text deltas to Responses SSE text events.
@@ -252,6 +253,7 @@ Known limitations:
 - `/v1/responses/compact` is implemented as a minimal compatibility shape, not full OpenAI compaction semantics.
 - Image and multimodal input are not implemented.
 - Full conversation store semantics are not implemented.
+- `previous_response_id` currently uses only an in-memory per-process cache for recent non-streaming requests; it is not durable and is cleared on restart.
 - Streaming mid-flight failures are now structured, but still do not preserve raw upstream event ordering/state for full forensic replay.
 
 ## Troubleshooting
@@ -371,6 +373,7 @@ Ignored runtime files:
 - `current` — Non-streaming error mapping hardened for upstream HTTP, timeout, connection, and JSON failures.
 - `current` — Added minimal `POST /v1/responses/compact` compatibility route.
 - `current` — Hardened streaming `response.failed` events with structured codes for malformed chunks, interruptions, and timeouts.
+- `current` — Added minimal in-memory `previous_response_id` conversation reuse for recent non-streaming requests.
 
 ## Operational Rules
 

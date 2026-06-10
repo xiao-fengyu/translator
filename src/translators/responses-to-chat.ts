@@ -1,4 +1,5 @@
 import { config } from '../config.ts';
+import { getResponseContext } from '../response-context-store.ts';
 import type { ChatCompletionsRequest, ChatMessage, ChatTool } from '../types/chat.ts';
 import type { ResponsesRequest, ResponsesTool } from '../types/responses.ts';
 
@@ -100,12 +101,19 @@ function inputToMessages(input: unknown): ChatMessage[] {
   return messages.length > 0 ? messages : [{ role: 'user', content: '' }];
 }
 
+function mergePreviousMessages(previousResponseId: unknown, nextMessages: ChatMessage[]): ChatMessage[] {
+  if (typeof previousResponseId !== 'string' || !previousResponseId.trim()) return nextMessages;
+  const previous = getResponseContext(previousResponseId.trim());
+  if (!previous) return nextMessages;
+  return [...previous, ...nextMessages];
+}
+
 export function responsesToChat(request: ResponsesRequest): ChatCompletionsRequest {
   const model = request.model || config.defaultModel;
-  const messages = [
+  const messages = mergePreviousMessages(request.previous_response_id, [
     ...instructionToSystemMessage(request.instructions),
     ...inputToMessages(request.input),
-  ];
+  ]);
 
   const chatRequest: ChatCompletionsRequest = {
     model,
@@ -126,4 +134,4 @@ export function responsesToChat(request: ResponsesRequest): ChatCompletionsReque
   return chatRequest;
 }
 
-export const internals = { stringifyContent, inputToMessages, responseToolToChatTool, responseToolChoiceToChatToolChoice };
+export const internals = { stringifyContent, inputToMessages, responseToolToChatTool, responseToolChoiceToChatToolChoice, mergePreviousMessages };
