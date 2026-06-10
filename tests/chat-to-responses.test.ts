@@ -45,3 +45,31 @@ test('wraps chat tool calls as responses function_call output', () => {
     arguments: '{"cmd":"pwd"}',
   });
 });
+
+test('wraps chat response with both content and tool_calls as message + function_call', () => {
+  const result = chatToResponses({
+    id: 'chat_mixed_1',
+    model: 'm',
+    choices: [{
+      message: {
+        content: 'thinking before calling',
+        tool_calls: [{ id: 'call_2', type: 'function', function: { name: 'shell', arguments: '{"cmd":"ls"}' } }],
+      },
+    }],
+    usage: { total_tokens: 12 },
+  }, 'm');
+  assert.equal(result.output_text, 'thinking before calling');
+  assert.equal(result.output.length, 2);
+  assert.equal(result.output[0].type, 'message');
+  assert.equal(result.output[0].role, 'assistant');
+  assert.equal(result.output[0].content[0].type, 'output_text');
+  assert.equal(result.output[0].content[0].text, 'thinking before calling');
+  assert.deepEqual(result.output[1], {
+    id: 'call_2',
+    type: 'function_call',
+    status: 'completed',
+    call_id: 'call_2',
+    name: 'shell',
+    arguments: '{"cmd":"ls"}',
+  });
+});
