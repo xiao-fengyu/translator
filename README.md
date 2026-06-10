@@ -325,3 +325,106 @@ codex doctor --summary
 - 没有停止或删除 NewAPI。
 - translator 当前仍以 NewAPI 作为临时上游：`http://127.0.0.1:3000/v1`。
 - 下一阶段如果要替代 NewAPI，需要先把 translator 的上游改为真实 OpenAI-compatible 服务并验证。
+
+## 2026-06-10 translator 直连真实上游
+
+### 操作
+
+用户确认开始第三阶段后，已将 translator 的上游从本机 NewAPI 改为真实 OpenAI-compatible 上游。
+
+当前 `/data/translator/.env` 关键配置：
+
+```bash
+UPSTREAM_BASE_URL=https://openclawroot.com/v1
+TRANSLATOR_MODELS=qwen3.6-plus,claude-opus-4-7,gemini-2.5-flash,gpt-5.5
+DEFAULT_MODEL=claude-opus-4-7
+```
+
+`UPSTREAM_API_KEY` 只保存在 `.env` 中，`.env` 已被 `.gitignore` 排除，不进入 git。
+
+同时修正了 `scripts/stop.sh`，避免停止 translator 时遗留 orphan 的 `node src/index.ts` 子进程。
+
+### 验证
+
+真实上游直连探测：
+
+```bash
+POST https://openclawroot.com/v1/chat/completions
+model=claude-opus-4-7
+```
+
+结果：HTTP 200，返回 `pong`。
+
+translator 非流式验证：
+
+```bash
+POST http://127.0.0.1:3002/v1/responses
+model=claude-opus-4-7
+stream=false
+```
+
+结果：HTTP 200，`output_text = "pong"`。
+
+translator 流式验证：
+
+```bash
+POST http://127.0.0.1:3002/v1/responses
+model=claude-opus-4-7
+stream=true
+```
+
+结果：正常输出 Responses SSE 事件：
+
+- `response.created`
+- `response.output_item.added`
+- `response.content_part.added`
+- `response.output_text.delta`
+- `response.output_text.done`
+- `response.content_part.done`
+- `response.output_item.done`
+- `response.completed`
+
+Codex 正式配置验证：
+
+```bash
+codex exec --ephemeral --skip-git-repo-check -C /data/workspace 'Reply exactly: pong'
+```
+
+结果：Codex 通过 `translator` provider 正常返回 `pong`。
+
+Codex Doctor：
+
+```bash
+codex doctor --summary
+```
+
+结果：
+
+- `Configuration: config loaded`
+- `Connectivity: active provider endpoints are reachable over HTTP`
+- `0 fail`
+
+### 当前链路
+
+现在 Codex 实际链路已经变为：
+
+```text
+Codex CLI
+  -> translator http://127.0.0.1:3002/v1/responses
+  -> https://openclawroot.com/v1/chat/completions
+```
+
+NewAPI 当前仍在本机保留，但已经不在 Codex 的主调用链路里：
+
+```text
+NewAPI 127.0.0.1:3000：保留，未停止，未删除
+```
+
+### 下一步
+
+下一步建议单独确认后执行：
+
+1. 将 translator 做成 systemd 服务，开机自启。
+2. 连续跑几个真实 Codex coding prompt，确认非 ping 场景稳定。
+3. 稳定后再讨论是否停止 NewAPI。
+4. 停止 NewAPI 前必须先备份 `/data/docker/new-api`，且需要用户再次明确确认。
