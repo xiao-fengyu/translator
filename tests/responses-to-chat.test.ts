@@ -1,12 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
+const TEST_DATA_DIR = join(tmpdir(), `translator-store-test-${Date.now()}`);
+mkdirSync(TEST_DATA_DIR, { recursive: true });
+process.env.STORE_DATA_DIR = TEST_DATA_DIR;
 process.env.UPSTREAM_BASE_URL = process.env.UPSTREAM_BASE_URL || 'http://127.0.0.1:3000/v1';
 process.env.UPSTREAM_API_KEY = process.env.UPSTREAM_API_KEY || 'test-key';
 process.env.DEFAULT_MODEL = process.env.DEFAULT_MODEL || 'claude-opus-4-7';
 
 const { responsesToChat } = await import('../src/translators/responses-to-chat.ts');
-const { saveResponseContext, clearResponseContexts } = await import('../src/response-context-store.ts');
+const { saveResponseContext, clearResponseContexts, _resetMemoryOnly } = await import('../src/response-context-store.ts');
 
 test('converts string input and instructions to chat messages', () => {
   clearResponseContexts();
@@ -109,4 +115,30 @@ test('ignores previous_response_id when no context exists', () => {
   assert.deepEqual(result.messages, [
     { role: 'user', content: 'fresh input' },
   ]);
+});
+
+test('persists context to disk and survives in-memory reset (simulated restart)', () => {
+  clearResponseContexts();
+  saveResponseContext('resp_disk_1', [
+    { role: 'user', content: 'saved before restart' },
+    { role: 'assistant', content: 'saved response' },
+  ]);
+
+  // Simulate process restart: clear in-memory map but keep disk file
+  _resetMemoryOnly();
+
+  const result = responsesToChat({
+    model: 'm',
+    previous_response_id: 'resp_disk_1',
+    input: 'after restart',
+  });
+
+  assert.deepEqual(result.messages, [
+    { role: 'user', content: 'saved before restart' },
+    { role: 'assistant', content: 'saved response' },
+    { role: 'user', content: 'after restart' },
+  ]);
+
+  // Cleanup test data
+  clearResponseContexts();
 });
