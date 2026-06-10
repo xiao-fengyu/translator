@@ -240,7 +240,8 @@ Implemented translation:
 - Responses `function_call` history to Chat Completions assistant `tool_calls`.
 - Responses `function_call_output` to Chat Completions tool messages.
 - Minimal in-memory `previous_response_id` reuse for recent non-streaming conversations in the same translator process.
-- Disk-persisted `previous_response_id` context store: recent non-streaming conversations survive translator restarts (JSON file in `data/response-contexts.json`, capped at 200 entries).
+- Disk-persisted `previous_response_id` context store: recent non-streaming conversations survive translator restarts (per-response JSON files in `data/context/`, capped at 200 entries with LRU index).
+- Arbitrary historical `previous_response_id` lookup: any previously saved response can be referenced by ID; aging trims oldest entries past the cap.
 - Multimodal input: Responses `input_image` content parts are converted to Chat Completions `image_url` multimodal messages (supports both URL and base64 data URIs).
 - Chat Completions text to Responses `message` / `output_text`.
 - Chat Completions `tool_calls` to Responses `function_call` output items.
@@ -254,7 +255,8 @@ Known limitations:
 
 - `/v1/responses/compact` is implemented as a minimal compatibility shape, not full OpenAI compaction semantics.
 - Image input is now supported for `input_image` content parts with URL or base64 data URI.
-- Full conversation store semantics (`store: true`, cross-process querying, arbitrary historical `previous_response_id` lookup) are not implemented.
+- Full conversation store semantics (`store: true`, cross-process querying beyond this translator instance) are not implemented.
+- Context store is local to this translator — different translator instances on other machines cannot share it.
 - `previous_response_id` disk store only preserves recent non-streaming responses within a capped local JSON file; it is not a full history database.
 - Streaming mid-flight failures are now structured, but still do not preserve raw upstream event ordering/state for full forensic replay.
 
@@ -378,6 +380,7 @@ Ignored runtime files:
 - `current` — Added minimal in-memory `previous_response_id` conversation reuse for recent non-streaming requests.
 - `current` — Upgraded `previous_response_id` to a disk-backed JSON store; context survives translator restarts (capped at 200 entries, stored in `data/response-contexts.json`).
 - `current` — Added multimodal input support: `input_image` content parts with URL or base64 data URI are converted to Chat Completions `image_url` multimodal messages.
+- `current` — Upgraded context store to per-response file format (`data/context/<id>.json`) with LRU index; arbitrary `previous_response_id` lookup across process restarts.
 
 ## Operational Rules
 

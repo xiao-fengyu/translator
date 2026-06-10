@@ -1,20 +1,21 @@
-import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { readFileSync, existsSync, mkdirSync, writeFileSync, readdirSync, unlinkSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ChatMessage } from './types/chat.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.STORE_DATA_DIR || join(__dirname, '..', 'data');
-const STORE_FILE = join(DATA_DIR, 'response-contexts.json');
+const CONTEXT_DIR = join(DATA_DIR, 'context');
+const INDEX_FILE = join(DATA_DIR, 'context-index.json');
 const MAX_CONTEXTS = 200;
 
-interface StoredContext {
+interface IndexEntry {
   id: string;
-  messages: ChatMessage[];
   createdAt: number;
+  touchedAt: number;
 }
 
-let contexts = new Map<string, StoredContext>();
+let index = new Map<string, IndexEntry>();
 let loaded = false;
 
 function cloneMessages(messages: ChatMessage[]): ChatMessage[] {
@@ -34,80 +35,125 @@ function cloneMessages(messages: ChatMessage[]): ChatMessage[] {
   }));
 }
 
-function ensureDataDir(): void {
-  if (!existsSync(DATA_DIR)) {
-    mkdirSync(DATA_DIR, { recursive: true });
+function ensureContextDir(): void {
+  if (!existsSync(CONTEXT_DIR)) {
+    mkdirSync(CONTEXT_DIR, { recursive: true });
   }
 }
 
-function load(): void {
+function loadIndex(): void {
   if (loaded) return;
   loaded = true;
   try {
-    if (!existsSync(STORE_FILE)) return;
-    const raw = readFileSync(STORE_FILE, 'utf-8');
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      contexts.clear();
-      return;
-    }
-    contexts = new Map<string, StoredContext>();
-    for (const item of parsed) {
-      if (item && typeof item.id === 'string' && Array.isArray(item.messages)) {
-        contexts.set(item.id, {
-          id: item.id,
-          messages: cloneMessages(item.messages),
-          createdAt: typeof item.createdAt === 'number' ? item.createdAt : Date.now(),
-        });
+    if (existsSync(INDEX_FILE)) {
+      const raw = readFileSync(INDEX_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        index = new Map<string, IndexEntry>();
+        for (const entry of parsed) {
+          if (entry && typeof entry.id === 'string') {
+            index.set(entry.id, {
+              id: entry.id,
+              createdAt: typeof entry.createdAt === 'number' ? entry.createdAt : Date.now(),
+              touchedAt: typeof entry.touchedAt === 'number' ? entry.touchedAt : Date.now(),
+            });
+          }
+        }
       }
     }
   } catch {
-    contexts.clear();
+    index = new Map<string, IndexEntry>();
   }
 }
 
-function persist(): void {
-  ensureDataDir();
-  const items: StoredContext[] = [...contexts.values()].sort((a, b) => a.createdAt - b.createdAt).slice(-MAX_CONTEXTS);
+function persistIndex(): void {
+  const entries: IndexEntry[] = [...index.values()].sort((a, b) => a.createdAt - b.createdAt);
   try {
-    writeFileSync(STORE_FILE, JSON.stringify(items), 'utf-8');
+    ensureContextDir();
+    writeFileSync(INDEX_FILE, JSON.stringify(entries), 'utf-8');
   } catch {
-    // disk full or permission issue — fail silently, contexts remain in memory
+    // disk full or permission issue — fail silently
   }
 }
 
-function trimContexts(): void {
-  if (contexts.size <= MAX_CONTEXTS) return;
-  const oldest = [...contexts.values()].sort((a, b) => a.createdAt - b.createdAt).slice(0, contexts.size - MAX_CONTEXTS);
-  for (const item of oldest) contexts.delete(item.id);
-  persist();
+function contextFilePath(id: string): string {
+  return join(CONTEXT_DIR, `${id.replace(/[^a-zA-Z0-9_-]/g, '_')}.json`);
 }
 
-export function saveResponseContext(id: string, messages: ChatMessage[]): void {
-  if (!id) return;
-  load();
-  contexts.set(id, { id, messages: cloneMessages(messages), createdAt: Date.now() });
-  trimContexts();
-  persist();
-}
-
-export function getResponseContext(id: string): ChatMessage[] | null {
-  load();
-  const hit = contexts.get(id);
-  return hit ? cloneMessages(hit.messages) : null;
-}
-
-export function clearResponseContexts(): void {
-  contexts.clear();
+function saveToFile(id: string, messages: ChatMessage[]): void {
+  ensureContextDir();
+  const entry = index.get(id);
+  if (!entry) return;
+  entry.touchedAt = Date.now();
   try {
-    if (existsSync(STORE_FILE)) writeFileSync(STORE_FILE, '[]', 'utf-8');
+    writeFileSync(contextFilePath(id), JSON.stringify(messages), 'utf-8');
+    persistIndex();
   } catch {
     // best effort
   }
 }
 
-/** Test-only: clear only in-memory cache, preserving disk file (simulates restart). */
+function trimIndex(): void {
+  if (index.size <= MAX_CONTEXTS) return;
+  const oldest = [...index.values()].sort((a, b) => a.createdAt - b.createdAt).slice(0, index.size - MAX_CONTEXTS);
+  for (const entry of oldest) {
+    index.delete(entry.id);
+    try {
+      const path = contextFilePath(entry.id);
+      if (existsSync(path)) unlinkSync(path);
+    } catch {
+      // best effort
+    }
+  }
+  persistIndex();
+}
+
+export function saveResponseContext(id: string, messages: ChatMessage[]): void {
+  if (!id) return;
+  loadIndex();
+  index.set(id, { id, createdAt: Date.now(), touchedAt: Date.now() });
+  saveToFile(id, messages);
+  trimIndex();
+}
+
+export function getResponseContext(id: string): ChatMessage[] | null {
+  loadIndex();
+  const entry = index.get(id);
+  if (!entry) return null;
+  entry.touchedAt = Date.now();
+  persistIndex();
+  const path = contextFilePath(id);
+  if (!existsSync(path)) return null;
+  try {
+    const raw = readFileSync(path, 'utf-8');
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    return cloneMessages(parsed);
+  } catch {
+    return null;
+  }
+}
+
+export function clearResponseContexts(): void {
+  loadIndex();
+  for (const entry of index.values()) {
+    try {
+      const path = contextFilePath(entry.id);
+      if (existsSync(path)) unlinkSync(path);
+    } catch {
+      // best effort
+    }
+  }
+  index.clear();
+  try {
+    if (existsSync(INDEX_FILE)) writeFileSync(INDEX_FILE, '[]', 'utf-8');
+  } catch {
+    // best effort
+  }
+}
+
+/** Test-only: clear only in-memory index, preserving disk files (simulates restart). */
 export function _resetMemoryOnly(): void {
-  contexts.clear();
+  index.clear();
   loaded = false;
 }

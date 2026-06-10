@@ -12,7 +12,7 @@ process.env.UPSTREAM_API_KEY = process.env.UPSTREAM_API_KEY || 'test-key';
 process.env.DEFAULT_MODEL = process.env.DEFAULT_MODEL || 'claude-opus-4-7';
 
 const { responsesToChat } = await import('../src/translators/responses-to-chat.ts');
-const { saveResponseContext, clearResponseContexts, _resetMemoryOnly } = await import('../src/response-context-store.ts');
+const { saveResponseContext, clearResponseContexts, getResponseContext, _resetMemoryOnly } = await import('../src/response-context-store.ts');
 
 test('converts string input and instructions to chat messages', () => {
   clearResponseContexts();
@@ -140,6 +140,38 @@ test('persists context to disk and survives in-memory reset (simulated restart)'
   ]);
 
   // Cleanup test data
+  clearResponseContexts();
+});
+
+test('stores each context as an individual file for arbitrary ID lookup', () => {
+  clearResponseContexts();
+  saveResponseContext('resp_a', [{ role: 'user', content: 'A' }]);
+  saveResponseContext('resp_b', [{ role: 'user', content: 'B' }]);
+
+  // Both should be independently queryable
+  const a = getResponseContext('resp_a');
+  const b = getResponseContext('resp_b');
+  assert.ok(a, 'resp_a should exist');
+  assert.ok(b, 'resp_b should exist');
+  assert.equal(a![0].content, 'A');
+  assert.equal(b![0].content, 'B');
+
+  clearResponseContexts();
+});
+
+test('survives memory reset with per-file storage (simulates restart)', () => {
+  clearResponseContexts();
+  saveResponseContext('resp_persistent_1', [
+    { role: 'user', content: 'will survive' },
+  ]);
+
+  // Simulate restart: clear memory but keep disk files
+  _resetMemoryOnly();
+
+  const result = getResponseContext('resp_persistent_1');
+  assert.ok(result, 'should reload from disk after memory reset');
+  assert.equal(result![0].content, 'will survive');
+
   clearResponseContexts();
 });
 
