@@ -243,6 +243,7 @@ Implemented translation:
 - Chat Completions `tool_calls` to Responses `function_call` output items.
 - Streaming text deltas to Responses SSE text events.
 - Streaming tool-call argument deltas to Responses SSE function-call events.
+- Streaming failures are normalized into structured `response.failed` error objects for malformed upstream events, interrupted streams, and timeout-like aborts.
 - Non-streaming upstream errors are normalized into stable translator error objects for `401/403/404/408/429/5xx`.
 - Upstream timeout, connection failure, invalid request JSON, and invalid upstream JSON are mapped to explicit error codes.
 
@@ -251,7 +252,7 @@ Known limitations:
 - `/v1/responses/compact` is implemented as a minimal compatibility shape, not full OpenAI compaction semantics.
 - Image and multimodal input are not implemented.
 - Full conversation store semantics are not implemented.
-- Streaming mid-flight failures emit `response.failed`, but still use a minimal error payload.
+- Streaming mid-flight failures are now structured, but still do not preserve raw upstream event ordering/state for full forensic replay.
 
 ## Troubleshooting
 
@@ -369,6 +370,7 @@ Ignored runtime files:
 - `b9d0e07` — Streamed tool-call event test added by Codex.
 - `current` — Non-streaming error mapping hardened for upstream HTTP, timeout, connection, and JSON failures.
 - `current` — Added minimal `POST /v1/responses/compact` compatibility route.
+- `current` — Hardened streaming `response.failed` events with structured codes for malformed chunks, interruptions, and timeouts.
 
 ## Operational Rules
 

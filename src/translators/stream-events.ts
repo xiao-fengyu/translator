@@ -1,4 +1,9 @@
 import { TextDecoder, TextEncoder } from 'node:util';
+import {
+  makeGenericStreamFailure,
+  makeStreamInterruptedError,
+  makeStreamMalformedChunkError,
+} from './stream-errors.ts';
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -66,6 +71,16 @@ function responseSnapshot(id: string, model: string, status: string, outputText 
   };
 }
 
+function parseChunkData(data: string): { chunk?: any; error?: { error: { message: string; type: string; code: string; status: number; detail?: unknown } } } {
+  try {
+    return { chunk: JSON.parse(data) };
+  } catch (error) {
+    return {
+      error: makeStreamMalformedChunkError({ raw: data, cause: error instanceof Error ? error.message : String(error) }),
+    };
+  }
+}
+
 export function makeResponsesStream(upstreamBody: ReadableStream<Uint8Array>, model: string): ReadableStream<Uint8Array> {
   let buffer = '';
   let outputText = '';
@@ -78,6 +93,8 @@ export function makeResponsesStream(upstreamBody: ReadableStream<Uint8Array>, mo
 
   return new ReadableStream<Uint8Array>({
     async start(controller) {
+      let closed = false;
+
       function send(event: string, data: unknown) {
         controller.enqueue(encoder.encode(sse(event, data)));
       }
@@ -129,8 +146,18 @@ export function makeResponsesStream(upstreamBody: ReadableStream<Uint8Array>, mo
             const data = parseDataLine(line.trim());
             if (!data) continue;
             if (data === '[DONE]') continue;
-            let chunk: any;
-            try { chunk = JSON.parse(data); } catch { continue; }
+            const parsed = parseChunkData(data);
+            if (parsed.error) {
+              send('response.failed', {
+                type: 'response.failed',
+                response: responseSnapshot(responseId, model, 'failed', outputText, [...toolCalls.values()]),
+                error: parsed.error.error,
+              });
+              closed = true;
+              controller.close();
+              return;
+            }
+            const chunk = parsed.chunk;
 
             for (const toolDelta of extractToolCallDeltas(chunk)) {
               const index = typeof toolDelta.index === 'number' ? toolDelta.index : 0;
@@ -228,13 +255,14 @@ export function makeResponsesStream(upstreamBody: ReadableStream<Uint8Array>, mo
           response: responseSnapshot(responseId, model, 'completed', outputText, [...toolCalls.values()]),
         });
       } catch (error: any) {
+        const mapped = error instanceof Error ? makeStreamInterruptedError(error) : makeGenericStreamFailure(error);
         send('response.failed', {
           type: 'response.failed',
           response: responseSnapshot(responseId, model, 'failed', outputText, [...toolCalls.values()]),
-          error: { message: error?.message || String(error) },
+          error: mapped.error,
         });
       } finally {
-        controller.close();
+        if (!closed) controller.close();
       }
     },
     cancel() {
@@ -243,4 +271,4 @@ export function makeResponsesStream(upstreamBody: ReadableStream<Uint8Array>, mo
   });
 }
 
-export const internals = { extractDelta, extractToolCallDeltas, responseSnapshot };
+export const internals = { extractDelta, extractToolCallDeltas, responseSnapshot, parseChunkData };

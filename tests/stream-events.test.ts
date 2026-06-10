@@ -6,10 +6,20 @@ function makeUpstreamSSE(chunks: string[]): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   return new ReadableStream<Uint8Array>({
     start(controller) {
-      for (const chunk of chunks) {
-        controller.enqueue(encoder.encode(chunk));
-      }
+      for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
       controller.close();
+    },
+  });
+}
+
+function makeFailingStream(message: string, name = 'Error'): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"hello"}}]}\n\n'));
+      const error = new Error(message);
+      error.name = name;
+      controller.error(error);
     },
   });
 }
@@ -43,8 +53,39 @@ test('makeResponsesStream emits tool_call events for streamed tool_calls deltas'
   assert.match(out, /event: response\.function_call_arguments\.delta/);
   assert.match(out, /event: response\.function_call_arguments\.done/);
   assert.match(out, /event: response\.completed/);
-
   assert.match(out, /"name":"shell"/);
   assert.match(out, /"call_id":"call_abc"/);
   assert.match(out, /"arguments":"\{\\"cmd\\":\\"pwd\\"\}"/);
+});
+
+test('makeResponsesStream emits structured failed event for malformed upstream JSON', async () => {
+  const upstream = makeUpstreamSSE([
+    'data: {"choices":[{"delta":{"content":"ok"}}]}\n\n',
+    'data: {bad json}\n\n',
+  ]);
+
+  const out = await collectStream(makeResponsesStream(upstream, 'm'));
+
+  assert.match(out, /event: response\.failed/);
+  assert.match(out, /"code":"upstream_invalid_stream_json"/);
+  assert.match(out, /"type":"upstream_error"/);
+  assert.match(out, /"status":502/);
+});
+
+test('makeResponsesStream emits structured failed event for interrupted upstream stream', async () => {
+  const out = await collectStream(makeResponsesStream(makeFailingStream('socket hang up'), 'm'));
+
+  assert.match(out, /event: response\.failed/);
+  assert.match(out, /"code":"upstream_stream_interrupted"/);
+  assert.match(out, /"message":"Upstream stream terminated unexpectedly\./);
+  assert.match(out, /"cause":"socket hang up"/);
+});
+
+test('makeResponsesStream emits timeout-specific failed event for aborted upstream stream', async () => {
+  const out = await collectStream(makeResponsesStream(makeFailingStream('deadline exceeded', 'AbortError'), 'm'));
+
+  assert.match(out, /event: response\.failed/);
+  assert.match(out, /"code":"upstream_stream_timeout"/);
+  assert.match(out, /"type":"timeout_error"/);
+  assert.match(out, /"status":504/);
 });
