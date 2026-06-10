@@ -269,3 +269,59 @@ http://127.0.0.1:3000/v1
 4. 备份 `/data/docker/new-api`。
 5. 停止 NewAPI 容器。
 6. 用户再次确认后，才删除 NewAPI 容器或数据。
+
+## 2026-06-10 Codex 正式切换到 translator
+
+### 操作
+
+用户确认开始第二阶段后，已将正式 Codex 配置从 `newapi` provider 切换到 `translator` provider。
+
+备份文件：
+
+```text
+/root/.codex/config.toml.backup-translator-20260610-130156
+```
+
+当前关键配置：
+
+```toml
+model = "claude-opus-4-7"
+model_provider = "translator"
+
+[model_providers.translator]
+name = "Local Responses Translator"
+base_url = "http://127.0.0.1:3002/v1"
+wire_api = "responses"
+```
+
+`newapi` provider block 暂时保留，便于回滚。
+
+### 验证
+
+正式配置下执行：
+
+```bash
+codex exec --ephemeral --skip-git-repo-check -C /data/workspace 'Reply exactly: pong'
+```
+
+结果：Codex 通过 `translator` provider 正常返回 `pong`。
+
+执行：
+
+```bash
+codex doctor --summary
+```
+
+结果：
+
+- `Configuration: config loaded`
+- `Connectivity: active provider endpoints are reachable over HTTP`
+- `websocket: Responses WebSocket is not enabled for the active provider`
+- `0 fail`
+
+### 当前边界
+
+- 没有重启 OpenClaw Gateway。
+- 没有停止或删除 NewAPI。
+- translator 当前仍以 NewAPI 作为临时上游：`http://127.0.0.1:3000/v1`。
+- 下一阶段如果要替代 NewAPI，需要先把 translator 的上游改为真实 OpenAI-compatible 服务并验证。
