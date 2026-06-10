@@ -242,13 +242,15 @@ Implemented translation:
 - Chat Completions `tool_calls` to Responses `function_call` output items.
 - Streaming text deltas to Responses SSE text events.
 - Streaming tool-call argument deltas to Responses SSE function-call events.
+- Non-streaming upstream errors are normalized into stable translator error objects for `401/403/404/408/429/5xx`.
+- Upstream timeout, connection failure, invalid request JSON, and invalid upstream JSON are mapped to explicit error codes.
 
 Known limitations:
 
 - `/v1/responses/compact` is not implemented.
 - Image and multimodal input are not implemented.
 - Full conversation store semantics are not implemented.
-- Error mapping is still minimal and should be hardened next.
+- Streaming mid-flight failures emit `response.failed`, but still use a minimal error payload.
 
 ## Troubleshooting
 
@@ -364,6 +366,7 @@ Ignored runtime files:
 - `92b3efa` — Responses tool-call compatibility added.
 - `8a0a5d9` — Mixed content + tool-call test added by Codex.
 - `b9d0e07` — Streamed tool-call event test added by Codex.
+- `current` — Non-streaming error mapping hardened for upstream HTTP, timeout, connection, and JSON failures.
 
 ## Operational Rules
 

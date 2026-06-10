@@ -4,6 +4,14 @@ import { responsesToChat } from './translators/responses-to-chat.ts';
 import { chatToResponses } from './translators/chat-to-responses.ts';
 import { makeResponsesStream } from './translators/stream-events.ts';
 import { callChatCompletions, fetchModels } from './upstream/openai-compatible.ts';
+import {
+  makeInvalidJsonError,
+  makeInvalidUpstreamJsonError,
+  makeTranslatorError,
+  makeUpstreamExceptionError,
+  makeUpstreamStatusError,
+  type TranslatorHttpError,
+} from './errors.ts';
 
 async function readJson(req: http.IncomingMessage): Promise<any> {
   const chunks: Buffer[] = [];
@@ -22,14 +30,12 @@ function sendJson(res: http.ServerResponse, status: number, body: unknown): void
   res.end(payload);
 }
 
+function sendTranslatorError(res: http.ServerResponse, error: TranslatorHttpError): void {
+  sendJson(res, error.status, error.body);
+}
+
 function sendError(res: http.ServerResponse, status: number, message: string, detail?: unknown): void {
-  sendJson(res, status, {
-    error: {
-      message,
-      type: 'translator_error',
-      detail,
-    },
-  });
+  sendTranslatorError(res, makeTranslatorError(status, message, detail));
 }
 
 async function pipeWebStreamToNode(webStream: ReadableStream<Uint8Array>, res: http.ServerResponse): Promise<void> {
@@ -63,8 +69,22 @@ async function handleModels(res: http.ServerResponse): Promise<void> {
 }
 
 async function handleChatProxy(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
-  const body = await readJson(req);
-  const upstream = await callChatCompletions(body);
+  let body: unknown;
+  try {
+    body = await readJson(req);
+  } catch (error) {
+    sendTranslatorError(res, makeInvalidJsonError(error));
+    return;
+  }
+
+  let upstream: Response;
+  try {
+    upstream = await callChatCompletions(body);
+  } catch (error) {
+    sendTranslatorError(res, makeUpstreamExceptionError(error));
+    return;
+  }
+
   const contentType = upstream.headers.get('content-type') || 'application/json';
   res.writeHead(upstream.status, { 'content-type': contentType });
   if (upstream.body) await pipeWebStreamToNode(upstream.body, res);
@@ -72,15 +92,27 @@ async function handleChatProxy(req: http.IncomingMessage, res: http.ServerRespon
 }
 
 async function handleResponses(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
-  const responsesRequest = await readJson(req);
-  const chatRequest = responsesToChat(responsesRequest);
-  const upstream = await callChatCompletions(chatRequest);
+  let responsesRequest: unknown;
+  try {
+    responsesRequest = await readJson(req);
+  } catch (error) {
+    sendTranslatorError(res, makeInvalidJsonError(error));
+    return;
+  }
+
+  const chatRequest = responsesToChat(responsesRequest as any);
+  let upstream: Response;
+  try {
+    upstream = await callChatCompletions(chatRequest);
+  } catch (error) {
+    sendTranslatorError(res, makeUpstreamExceptionError(error));
+    return;
+  }
   const textEventStream = (upstream.headers.get('content-type') || '').includes('text/event-stream');
 
   if (!upstream.ok) {
     const bodyText = await upstream.text().catch(() => '');
-    res.writeHead(upstream.status, { 'content-type': upstream.headers.get('content-type') || 'application/json' });
-    res.end(bodyText || JSON.stringify({ error: { message: `upstream returned ${upstream.status}` } }));
+    sendTranslatorError(res, makeUpstreamStatusError(upstream.status, bodyText));
     return;
   }
 
@@ -99,7 +131,13 @@ async function handleResponses(req: http.IncomingMessage, res: http.ServerRespon
     return;
   }
 
-  const chatResponse = await upstream.json();
+  let chatResponse: unknown;
+  try {
+    chatResponse = await upstream.json();
+  } catch (error) {
+    sendTranslatorError(res, makeInvalidUpstreamJsonError(error));
+    return;
+  }
   sendJson(res, 200, chatToResponses(chatResponse, chatRequest.model));
 }
 
