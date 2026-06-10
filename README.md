@@ -541,3 +541,22 @@ TRANSLATOR_HEALTH_URL=http://127.0.0.1:3002/healthz npm run healthcheck
 A real Codex coding attempt was run against this repository after the translator became the active provider. Codex could start and respond through translator, but the first coding attempt stopped after printing intended shell commands instead of actually modifying files.
 
 This is useful signal: chat/smoke tests pass, but full coding-agent behavior still needs better Responses/tool-call compatibility before relying on Codex for autonomous edits through this translator.
+
+## 2026-06-10 Tool-call compatibility update
+
+Translator now includes a minimal Responses tool-call compatibility layer:
+
+- Responses `tools` / `tool_choice` are forwarded to Chat Completions `tools` / `tool_choice`.
+- Chat Completions `tool_calls` are converted back to Responses `function_call` output items.
+- Responses `function_call` history and `function_call_output` items are converted back to Chat Completions assistant/tool messages.
+- Streaming Chat Completions tool-call deltas are mapped to Responses `response.function_call_arguments.*` events.
+
+Validation:
+
+```text
+npm run check        ✅
+npm test             ✅ 9/9
+npm run healthcheck  ✅
+```
+
+A real Codex coding smoke test also passed after this update: Codex invoked shell through the translator and created a temporary `.codex-tool-test.txt` file with the expected content. The temporary file was removed and is not committed.

@@ -39,3 +39,38 @@ test('maps max_output_tokens to max_tokens', () => {
   assert.equal(result.max_tokens, 123);
   assert.equal(result.stream, true);
 });
+
+test('maps responses function tools to chat tools', () => {
+  const result = responsesToChat({
+    model: 'm',
+    input: 'use a tool',
+    tools: [
+      { type: 'function', name: 'shell', description: 'Run shell', parameters: { type: 'object' } },
+    ],
+    tool_choice: { type: 'function', name: 'shell' },
+    parallel_tool_calls: false,
+  });
+  assert.deepEqual(result.tools, [
+    { type: 'function', function: { name: 'shell', description: 'Run shell', parameters: { type: 'object' } } },
+  ]);
+  assert.deepEqual(result.tool_choice, { type: 'function', function: { name: 'shell' } });
+  assert.equal(result.parallel_tool_calls, false);
+});
+
+test('maps responses function call history and output to chat messages', () => {
+  const result = responsesToChat({
+    model: 'm',
+    input: [
+      { type: 'function_call', call_id: 'call_1', name: 'shell', arguments: '{"cmd":"pwd"}' },
+      { type: 'function_call_output', call_id: 'call_1', output: '/data/translator' },
+    ],
+  });
+  assert.deepEqual(result.messages, [
+    {
+      role: 'assistant',
+      content: null,
+      tool_calls: [{ id: 'call_1', type: 'function', function: { name: 'shell', arguments: '{"cmd":"pwd"}' } }],
+    },
+    { role: 'tool', tool_call_id: 'call_1', content: '/data/translator' },
+  ]);
+});

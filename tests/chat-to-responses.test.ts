@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { chatToResponses, extractChatText } from '../src/translators/chat-to-responses.ts';
+import { chatToResponses, extractChatText, extractChatToolCalls } from '../src/translators/chat-to-responses.ts';
 
 test('extracts chat completion text', () => {
   assert.equal(extractChatText({ choices: [{ message: { content: 'pong' } }] }), 'pong');
@@ -14,4 +14,34 @@ test('wraps chat response as responses-like object', () => {
   assert.equal(result.output_text, 'pong');
   assert.equal(result.output[0].content[0].text, 'pong');
   assert.deepEqual(result.usage, { total_tokens: 2 });
+});
+
+test('extracts chat tool calls', () => {
+  const calls = extractChatToolCalls({ choices: [{ message: { tool_calls: [{ id: 'call_1', type: 'function', function: { name: 'shell', arguments: '{}' } }] } }] });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].function.name, 'shell');
+});
+
+test('wraps chat tool calls as responses function_call output', () => {
+  const result = chatToResponses({
+    id: 'chat_tool_1',
+    model: 'm',
+    choices: [{
+      message: {
+        content: null,
+        tool_calls: [{ id: 'call_1', type: 'function', function: { name: 'shell', arguments: '{"cmd":"pwd"}' } }],
+      },
+    }],
+    usage: { total_tokens: 9 },
+  }, 'm');
+  assert.equal(result.output_text, '');
+  assert.equal(result.output.length, 1);
+  assert.deepEqual(result.output[0], {
+    id: 'call_1',
+    type: 'function_call',
+    status: 'completed',
+    call_id: 'call_1',
+    name: 'shell',
+    arguments: '{"cmd":"pwd"}',
+  });
 });
