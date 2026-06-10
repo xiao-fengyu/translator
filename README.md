@@ -519,3 +519,25 @@ Connectivity: active provider endpoints are reachable over HTTP
 - 未停止或删除 NewAPI。
 - 仅停止旧的手动 translator 进程，并由 systemd 接管同一服务。
 - `.env` 仍然只保存在本机且被 gitignore。
+
+## Health Check
+
+Run the local translator health check with:
+
+```bash
+npm run healthcheck
+```
+
+The script calls `http://127.0.0.1:3002/healthz`, verifies HTTP 200, parses the JSON body, and fails if `ok !== true`.
+
+You can override the URL when needed:
+
+```bash
+TRANSLATOR_HEALTH_URL=http://127.0.0.1:3002/healthz npm run healthcheck
+```
+
+## 2026-06-10 Codex coding stability test
+
+A real Codex coding attempt was run against this repository after the translator became the active provider. Codex could start and respond through translator, but the first coding attempt stopped after printing intended shell commands instead of actually modifying files.
+
+This is useful signal: chat/smoke tests pass, but full coding-agent behavior still needs better Responses/tool-call compatibility before relying on Codex for autonomous edits through this translator.
