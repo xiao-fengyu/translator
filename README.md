@@ -1,65 +1,43 @@
 # Codex Responses Translator
 
-本项目路径：`/data/translator`
-
-## 约束
-
-本项目按用户要求套用 `/data/e-platform` 同级别工作约束：
-
-1. 先写计划书，确认后执行。
-2. 严格按计划执行，变更路线必须先说明并确认。
-3. 不擅自重启 OpenClaw Gateway。
-4. 每次任务后更新本 README。
-5. 一次只处理一个问题。
-6. 目前没有 GitHub 仓库：暂时不 push；保留本地 git commit，后续用户提供仓库后再配置 remote 并推送。
-7. NewAPI 卸载/删除属于破坏性操作：translator 跑通并单独确认替换阶段前，不删除 NewAPI 数据。
-
-## 目标
-
-Codex CLI 新版本主要使用 OpenAI Responses API：
-
-```text
-POST /v1/responses
-```
-
-但部分上游模型/中转，尤其 Claude 兼容模型，更稳定支持：
-
-```text
-POST /v1/chat/completions
-```
-
-本项目提供本地协议翻译层：
+本项目是 Codex CLI 的本地协议转换层，把 Codex 使用的 OpenAI Responses API 转成更通用的 OpenAI-compatible Chat Completions API。
 
 ```text
 Codex CLI
-  -> /v1/responses
+  -> http://127.0.0.1:3002/v1/responses
   -> translator
-  -> /v1/chat/completions
-  -> upstream OpenAI-compatible API
+  -> https://openclawroot.com/v1/chat/completions
 ```
 
-## 当前阶段
+项目路径：`/data/translator`  
+GitHub：`https://github.com/xiao-fengyu/translator`
 
-阶段：MVP 实现中。
+## Current Status
 
-当前优先实现：
+当前阶段：可用原型 / 稳态化收尾。
 
-- `GET /healthz`
-- `GET /v1/models`
-- `POST /v1/responses`：Responses 请求转 Chat Completions 请求
-- Chat Completions 响应包装回 Responses-like JSON
-- `POST /v1/chat/completions`：透传上游，便于测试
-- 基础非流式与流式响应
+已验证能力：
 
-暂不承诺完整支持：
+- Codex 基础聊天可用。
+- Codex 可通过 translator 调用 shell 工具。
+- Codex 可读代码、改文件、运行测试。
+- Responses `tools` / `tool_choice` 可转为 Chat Completions `tools` / `tool_choice`。
+- Chat Completions `tool_calls` 可转回 Responses `function_call`。
+- 流式 tool-call delta 可转为 Responses `response.function_call_arguments.*` 事件。
+- translator 已由 systemd 接管并开机自启。
 
-- tool calls
-- image / multimodal input
-- `/v1/responses/compact`
-- conversation store
-- Codex 全量 Responses 事件语义
+当前服务：
 
-## 目录规划
+```text
+codex-translator.service: enabled / active
+listen: 127.0.0.1:3002
+upstream: https://openclawroot.com/v1
+model: claude-opus-4-7
+```
+
+NewAPI 当前仍保留在本机，但 Codex 主链路已经不经过 NewAPI。
+
+## Repository Layout
 
 ```text
 /data/translator/
@@ -67,34 +45,34 @@ Codex CLI
 ├── package.json
 ├── .env.example
 ├── .gitignore
-├── src/
-│   ├── index.ts
-│   ├── config.ts
-│   ├── routes/
-│   │   ├── responses.ts
-│   │   ├── models.ts
-│   │   └── health.ts
-│   ├── translators/
-│   │   ├── responses-to-chat.ts
-│   │   ├── chat-to-responses.ts
-│   │   └── stream-events.ts
-│   ├── upstream/
-│   │   └── openai-compatible.ts
-│   └── types/
-│       ├── responses.ts
-│       └── chat.ts
+├── deploy/
+│   └── codex-translator.service
 ├── scripts/
+│   ├── healthcheck.sh
 │   ├── start.sh
 │   ├── stop.sh
 │   └── test-codex.sh
+├── src/
+│   ├── config.ts
+│   ├── index.ts
+│   ├── translators/
+│   │   ├── chat-to-responses.ts
+│   │   ├── responses-to-chat.ts
+│   │   └── stream-events.ts
+│   ├── types/
+│   │   ├── chat.ts
+│   │   └── responses.ts
+│   └── upstream/
+│       └── openai-compatible.ts
 └── tests/
+    ├── chat-to-responses.test.ts
     ├── responses-to-chat.test.ts
-    └── chat-to-responses.test.ts
+    └── stream-events.test.ts
 ```
 
-## 配置
+## Configuration
 
-复制环境变量模板：
+Create local config from the example:
 
 ```bash
 cd /data/translator
@@ -102,461 +80,294 @@ cp .env.example .env
 chmod 600 .env
 ```
 
-关键配置：
+Example fields:
 
 ```bash
 TRANSLATOR_HOST=127.0.0.1
 TRANSLATOR_PORT=3002
-UPSTREAM_BASE_URL=http://127.0.0.1:3000/v1
+UPSTREAM_BASE_URL=https://openclawroot.com/v1
 UPSTREAM_API_KEY=replace-me
 TRANSLATOR_MODELS=claude-opus-4-7,gpt-5.5,qwen3.6-plus,gemini-2.5-flash
 DEFAULT_MODEL=claude-opus-4-7
+UPSTREAM_TIMEOUT_MS=120000
 ```
 
-迁移期可以先让 translator 继续调用本机 NewAPI：
+Important:
+
+- `.env` contains secrets and must never be committed.
+- `.env.example` is safe to commit and contains placeholders only.
+- `UPSTREAM_BASE_URL` must be the OpenAI-compatible base URL ending in `/v1`.
+
+## Codex Configuration
+
+`~/.codex/config.toml` should point Codex at translator:
+
+```toml
+model = "claude-opus-4-7"
+model_provider = "translator"
+
+[model_providers.translator]
+name = "Local Responses Translator"
+base_url = "http://127.0.0.1:3002/v1"
+wire_api = "responses"
+```
+
+Keep the old provider block if you want a quick rollback path.
+
+## Run With Systemd
+
+The active deployment uses systemd:
+
+```bash
+systemctl status codex-translator.service
+systemctl restart codex-translator.service
+systemctl enable codex-translator.service
+```
+
+Service file on host:
 
 ```text
-UPSTREAM_BASE_URL=http://127.0.0.1:3000/v1
+/etc/systemd/system/codex-translator.service
 ```
 
-等 translator 验证通过，再进入替换 NewAPI 阶段。
+Repository copy:
 
-## 启动
+```text
+deploy/codex-translator.service
+```
+
+Install or refresh service file:
+
+```bash
+cp /data/translator/deploy/codex-translator.service /etc/systemd/system/codex-translator.service
+systemctl daemon-reload
+systemctl enable codex-translator.service
+systemctl restart codex-translator.service
+```
+
+## Manual Run
+
+For local manual debugging only:
 
 ```bash
 cd /data/translator
 npm start
 ```
 
-或：
+Helper scripts:
 
 ```bash
 ./scripts/start.sh
+./scripts/stop.sh
 ```
 
-## 健康检查
-
-```bash
-curl http://127.0.0.1:3002/healthz
-```
-
-## Codex 配置示例
-
-后续可将 `~/.codex/config.toml` 指向 translator：
-
-```toml
-model = "claude-opus-4-7"
-model_provider = "translator"
-
-[model_providers.translator]
-name = "Local Responses Translator"
-base_url = "http://127.0.0.1:3002/v1"
-wire_api = "responses"
-```
-
-## NewAPI 替换计划
-
-安全顺序：
-
-1. translator 在 `127.0.0.1:3002` 跑通。
-2. Codex 指向 translator 并通过 `codex exec ping`。
-3. 备份 `/data/docker/new-api`。
-4. 停止 NewAPI 容器，但不删除数据。
-5. 将 translator 调整到目标端口。
-6. 用户再次确认后，才删除 NewAPI 容器/数据。
-
-## 变更记录
-
-- 2026-06-10：用户确认按计划执行；补充说明本项目暂时无 GitHub 仓库，不 push，只保留本地 commit。
-- 2026-06-10：初始化项目规划和 README。
-
-## 2026-06-10 MVP 验证结果
-
-### 已完成
-
-- 初始化 `/data/translator` 项目目录。
-- 写入 README、环境变量模板、启动/停止脚本。
-- 实现 Node.js 轻量 HTTP 服务，无外部 npm 依赖。
-- 实现：
-  - `GET /healthz`
-  - `GET /v1/models`
-  - `POST /v1/chat/completions` 上游透传
-  - `POST /v1/responses` 非流式转换
-  - `POST /v1/responses` 流式 SSE 转换
-- 新增单元测试：
-  - Responses 请求转 Chat Completions 请求
-  - Chat Completions 响应包装为 Responses-like 响应
-
-### 验证命令与结果
-
-语法检查：
-
-```bash
-node --check src/index.ts
-```
-
-单元测试：
-
-```bash
-npm test
-```
-
-结果：`5/5 pass`。
-
-HTTP 健康检查：
-
-```bash
-curl http://127.0.0.1:3002/healthz
-```
-
-结果：正常返回 `ok: true`。
-
-非流式 Responses 验证：
-
-```bash
-curl http://127.0.0.1:3002/v1/responses \
-  -H 'content-type: application/json' \
-  -d '{"model":"claude-opus-4-7","instructions":"Reply with exactly pong.","input":"ping","stream":false}'
-```
-
-结果：`output_text = "pong"`。
-
-流式 Responses 验证：
-
-```bash
-curl -N http://127.0.0.1:3002/v1/responses \
-  -H 'content-type: application/json' \
-  -d '{"model":"claude-opus-4-7","instructions":"Reply exactly pong.","input":"ping","stream":true}'
-```
-
-结果：正常发出 `response.created`、`response.output_text.delta`、`response.completed` 等事件。
-
-Codex CLI 临时配置验证：
-
-```bash
-CODEX_HOME=<temporary-home> codex exec --ephemeral --skip-git-repo-check -C /data/workspace 'Reply exactly: pong'
-```
-
-结果：Codex 通过 translator 使用 `claude-opus-4-7` 正常返回 `pong`。
-
-### 当前运行状态
-
-translator 当前运行在：
-
-```text
-http://127.0.0.1:3002
-```
-
-当前上游仍临时指向本机 NewAPI：
-
-```text
-http://127.0.0.1:3000/v1
-```
-
-这意味着：
-
-- translator 的协议转换已经跑通；
-- NewAPI 暂时仍作为上游 API/key 管理层存在；
-- 尚未进入“停用/卸载 NewAPI”阶段。
-
-### 下一步
-
-下一步建议单独确认后执行：
-
-1. 将 Codex 正式配置切到 translator。
-2. 如果要彻底替代 NewAPI，则需要把 translator 的 `UPSTREAM_BASE_URL` 和 `UPSTREAM_API_KEY` 改为真实上游，而不是本机 NewAPI。
-3. 验证真实上游直连成功。
-4. 备份 `/data/docker/new-api`。
-5. 停止 NewAPI 容器。
-6. 用户再次确认后，才删除 NewAPI 容器或数据。
-
-## 2026-06-10 Codex 正式切换到 translator
-
-### 操作
-
-用户确认开始第二阶段后，已将正式 Codex 配置从 `newapi` provider 切换到 `translator` provider。
-
-备份文件：
-
-```text
-/root/.codex/config.toml.backup-translator-20260610-130156
-```
-
-当前关键配置：
-
-```toml
-model = "claude-opus-4-7"
-model_provider = "translator"
-
-[model_providers.translator]
-name = "Local Responses Translator"
-base_url = "http://127.0.0.1:3002/v1"
-wire_api = "responses"
-```
-
-`newapi` provider block 暂时保留，便于回滚。
-
-### 验证
-
-正式配置下执行：
-
-```bash
-codex exec --ephemeral --skip-git-repo-check -C /data/workspace 'Reply exactly: pong'
-```
-
-结果：Codex 通过 `translator` provider 正常返回 `pong`。
-
-执行：
-
-```bash
-codex doctor --summary
-```
-
-结果：
-
-- `Configuration: config loaded`
-- `Connectivity: active provider endpoints are reachable over HTTP`
-- `websocket: Responses WebSocket is not enabled for the active provider`
-- `0 fail`
-
-### 当前边界
-
-- 没有重启 OpenClaw Gateway。
-- 没有停止或删除 NewAPI。
-- translator 当前仍以 NewAPI 作为临时上游：`http://127.0.0.1:3000/v1`。
-- 下一阶段如果要替代 NewAPI，需要先把 translator 的上游改为真实 OpenAI-compatible 服务并验证。
-
-## 2026-06-10 translator 直连真实上游
-
-### 操作
-
-用户确认开始第三阶段后，已将 translator 的上游从本机 NewAPI 改为真实 OpenAI-compatible 上游。
-
-当前 `/data/translator/.env` 关键配置：
-
-```bash
-UPSTREAM_BASE_URL=https://openclawroot.com/v1
-TRANSLATOR_MODELS=qwen3.6-plus,claude-opus-4-7,gemini-2.5-flash,gpt-5.5
-DEFAULT_MODEL=claude-opus-4-7
-```
-
-`UPSTREAM_API_KEY` 只保存在 `.env` 中，`.env` 已被 `.gitignore` 排除，不进入 git。
-
-同时修正了 `scripts/stop.sh`，避免停止 translator 时遗留 orphan 的 `node src/index.ts` 子进程。
-
-### 验证
-
-真实上游直连探测：
-
-```bash
-POST https://openclawroot.com/v1/chat/completions
-model=claude-opus-4-7
-```
-
-结果：HTTP 200，返回 `pong`。
-
-translator 非流式验证：
-
-```bash
-POST http://127.0.0.1:3002/v1/responses
-model=claude-opus-4-7
-stream=false
-```
-
-结果：HTTP 200，`output_text = "pong"`。
-
-translator 流式验证：
-
-```bash
-POST http://127.0.0.1:3002/v1/responses
-model=claude-opus-4-7
-stream=true
-```
-
-结果：正常输出 Responses SSE 事件：
-
-- `response.created`
-- `response.output_item.added`
-- `response.content_part.added`
-- `response.output_text.delta`
-- `response.output_text.done`
-- `response.content_part.done`
-- `response.output_item.done`
-- `response.completed`
-
-Codex 正式配置验证：
-
-```bash
-codex exec --ephemeral --skip-git-repo-check -C /data/workspace 'Reply exactly: pong'
-```
-
-结果：Codex 通过 `translator` provider 正常返回 `pong`。
-
-Codex Doctor：
-
-```bash
-codex doctor --summary
-```
-
-结果：
-
-- `Configuration: config loaded`
-- `Connectivity: active provider endpoints are reachable over HTTP`
-- `0 fail`
-
-### 当前链路
-
-现在 Codex 实际链路已经变为：
-
-```text
-Codex CLI
-  -> translator http://127.0.0.1:3002/v1/responses
-  -> https://openclawroot.com/v1/chat/completions
-```
-
-NewAPI 当前仍在本机保留，但已经不在 Codex 的主调用链路里：
-
-```text
-NewAPI 127.0.0.1:3000：保留，未停止，未删除
-```
-
-### 下一步
-
-下一步建议单独确认后执行：
-
-1. 将 translator 做成 systemd 服务，开机自启。
-2. 连续跑几个真实 Codex coding prompt，确认非 ping 场景稳定。
-3. 稳定后再讨论是否停止 NewAPI。
-4. 停止 NewAPI 前必须先备份 `/data/docker/new-api`，且需要用户再次明确确认。
-
-## 2026-06-10 systemd 服务化
-
-### 操作
-
-已将 translator 从手动 `npm start` 进程切换为 systemd 服务：
-
-```text
-codex-translator.service
-```
-
-服务文件：
-
-```text
-/etc/systemd/system/codex-translator.service
-```
-
-仓库内同步保存了一份部署副本：
-
-```text
-deploy/codex-translator.service
-```
-
-启用命令已执行：
-
-```bash
-systemctl daemon-reload
-systemctl enable codex-translator.service
-systemctl restart codex-translator.service
-```
-
-### 当前服务状态
-
-```text
-Active: active (running)
-Main PID: /usr/bin/node /data/translator/src/index.ts
-Listen: 127.0.0.1:3002
-```
-
-健康检查：
-
-```bash
-curl http://127.0.0.1:3002/healthz
-```
-
-返回：
-
-```json
-{"ok":true,"service":"codex-responses-translator","version":"0.1.0"}
-```
-
-### 验证
-
-单元测试：
-
-```bash
-npm test
-```
-
-结果：5/5 pass。
-
-语法检查：
-
-```bash
-npm run check
-```
-
-结果：通过。
-
-Codex 实测：
-
-```bash
-codex exec --ephemeral --skip-git-repo-check -C /data/workspace 'Reply exactly: pong'
-```
-
-结果：通过 translator 返回 `pong`。
-
-Codex Doctor：
-
-```text
-Configuration: config loaded
-Connectivity: active provider endpoints are reachable over HTTP
-0 fail
-```
-
-### 边界
-
-- 未重启 OpenClaw Gateway。
-- 未停止或删除 NewAPI。
-- 仅停止旧的手动 translator 进程，并由 systemd 接管同一服务。
-- `.env` 仍然只保存在本机且被 gitignore。
+Do not run manual and systemd instances at the same time on port `3002`.
 
 ## Health Check
-
-Run the local translator health check with:
 
 ```bash
 npm run healthcheck
 ```
 
-The script calls `http://127.0.0.1:3002/healthz`, verifies HTTP 200, parses the JSON body, and fails if `ok !== true`.
+Expected output:
 
-You can override the URL when needed:
+```text
+translator healthy: codex-responses-translator 0.1.0
+```
+
+Direct HTTP check:
+
+```bash
+curl http://127.0.0.1:3002/healthz
+```
+
+Expected JSON:
+
+```json
+{"ok":true,"service":"codex-responses-translator","version":"0.1.0"}
+```
+
+Override health URL when needed:
 
 ```bash
 TRANSLATOR_HEALTH_URL=http://127.0.0.1:3002/healthz npm run healthcheck
 ```
 
-## 2026-06-10 Codex coding stability test
+## Validation
 
-A real Codex coding attempt was run against this repository after the translator became the active provider. Codex could start and respond through translator, but the first coding attempt stopped after printing intended shell commands instead of actually modifying files.
+Run all local gates:
 
-This is useful signal: chat/smoke tests pass, but full coding-agent behavior still needs better Responses/tool-call compatibility before relying on Codex for autonomous edits through this translator.
-
-## 2026-06-10 Tool-call compatibility update
-
-Translator now includes a minimal Responses tool-call compatibility layer:
-
-- Responses `tools` / `tool_choice` are forwarded to Chat Completions `tools` / `tool_choice`.
-- Chat Completions `tool_calls` are converted back to Responses `function_call` output items.
-- Responses `function_call` history and `function_call_output` items are converted back to Chat Completions assistant/tool messages.
-- Streaming Chat Completions tool-call deltas are mapped to Responses `response.function_call_arguments.*` events.
-
-Validation:
-
-```text
-npm run check        ✅
-npm test             ✅ 9/9
-npm run healthcheck  ✅
+```bash
+npm run check
+npm test
+npm run healthcheck
 ```
 
-A real Codex coding smoke test also passed after this update: Codex invoked shell through the translator and created a temporary `.codex-tool-test.txt` file with the expected content. The temporary file was removed and is not committed.
+Codex smoke test:
+
+```bash
+codex exec --ephemeral --skip-git-repo-check -C /data/workspace 'Reply exactly: pong'
+```
+
+Codex tool-call smoke test:
+
+```bash
+codex exec --sandbox workspace-write --skip-git-repo-check -C /data/translator \
+  'Create a file named .codex-tool-test.txt in the current directory with exactly the text TOOL_OK. Do not modify any other files.'
+```
+
+Clean up after the tool-call smoke test:
+
+```bash
+rm -f /data/translator/.codex-tool-test.txt
+```
+
+## Supported API Surface
+
+Implemented routes:
+
+- `GET /healthz`
+- `GET /v1/models`
+- `POST /v1/responses`
+- `POST /v1/chat/completions` pass-through
+
+Implemented translation:
+
+- Responses text input to Chat Completions messages.
+- Responses `instructions` to system message.
+- Responses `tools` / `tool_choice` to Chat Completions tools.
+- Responses `function_call` history to Chat Completions assistant `tool_calls`.
+- Responses `function_call_output` to Chat Completions tool messages.
+- Chat Completions text to Responses `message` / `output_text`.
+- Chat Completions `tool_calls` to Responses `function_call` output items.
+- Streaming text deltas to Responses SSE text events.
+- Streaming tool-call argument deltas to Responses SSE function-call events.
+
+Known limitations:
+
+- `/v1/responses/compact` is not implemented.
+- Image and multimodal input are not implemented.
+- Full conversation store semantics are not implemented.
+- Error mapping is still minimal and should be hardened next.
+
+## Troubleshooting
+
+Check service:
+
+```bash
+systemctl --no-pager --full status codex-translator.service
+```
+
+Read logs:
+
+```bash
+journalctl -u codex-translator.service -n 100 --no-pager
+journalctl -u codex-translator.service -f
+```
+
+Check port:
+
+```bash
+ss -ltnp | grep ':3002'
+```
+
+Check Codex provider:
+
+```bash
+grep -E '^(model|model_provider) =|\[model_providers\.translator\]|base_url = "http://127.0.0.1:3002' ~/.codex/config.toml
+```
+
+Run Codex diagnostics:
+
+```bash
+codex doctor --summary
+```
+
+Common symptoms:
+
+- `429 Too Many Requests`: upstream model/channel rate limit; wait or switch model.
+- `connection refused 127.0.0.1:3002`: translator service is down or port conflict exists.
+- Codex chats but will not edit files: tool-call translation is broken or service is running old code; restart `codex-translator.service` and rerun tests.
+- Secret printed in logs: rotate upstream key and inspect `.env`; do not commit runtime logs.
+
+## Rollback
+
+Rollback Codex to old NewAPI provider if needed:
+
+1. Edit `~/.codex/config.toml`.
+2. Change:
+
+```toml
+model_provider = "newapi"
+```
+
+3. Ensure the old provider block exists:
+
+```toml
+[model_providers.newapi]
+name = "NewAPI"
+base_url = "http://127.0.0.1:3000/v1"
+wire_api = "responses"
+```
+
+4. Verify:
+
+```bash
+codex doctor --summary
+codex exec --ephemeral --skip-git-repo-check -C /data/workspace 'Reply exactly: pong'
+```
+
+Rollback translator code:
+
+```bash
+cd /data/translator
+git log --oneline
+git checkout <known-good-commit>
+systemctl restart codex-translator.service
+npm run healthcheck
+```
+
+Do not delete NewAPI until translator has been stable long enough and the user explicitly confirms. If NewAPI is ever stopped, back up first:
+
+```bash
+tar -czf /data/docker/new-api-backup-$(date +%Y%m%d-%H%M%S).tar.gz /data/docker/new-api
+```
+
+## Git Workflow
+
+Remote:
+
+```text
+git@github.com:xiao-fengyu/translator.git
+```
+
+Push current branch to GitHub `main`:
+
+```bash
+git push origin HEAD:main
+```
+
+Ignored runtime files:
+
+- `.env`
+- `.env.backup*`
+- `translator.log`
+- `translator.pid`
+
+## Milestones
+
+- `f27832f` — Initial translator MVP.
+- `34edb16` — Codex config switched to translator.
+- `2669a4c` — Translator switched to direct upstream.
+- `7f66e82` — systemd service added.
+- `c9ed05f` — healthcheck script added.
+- `92b3efa` — Responses tool-call compatibility added.
+- `8a0a5d9` — Mixed content + tool-call test added by Codex.
+- `b9d0e07` — Streamed tool-call event test added by Codex.
+
+## Operational Rules
+
+- Do not restart OpenClaw Gateway for this project unless the user explicitly asks.
+- Do not stop or delete NewAPI without a separate confirmation and backup.
+- Do not print or commit API keys.
+- Prefer small changes followed by `npm run check`, `npm test`, and `npm run healthcheck`.
