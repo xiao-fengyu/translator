@@ -428,3 +428,94 @@ NewAPI 127.0.0.1:3000：保留，未停止，未删除
 2. 连续跑几个真实 Codex coding prompt，确认非 ping 场景稳定。
 3. 稳定后再讨论是否停止 NewAPI。
 4. 停止 NewAPI 前必须先备份 `/data/docker/new-api`，且需要用户再次明确确认。
+
+## 2026-06-10 systemd 服务化
+
+### 操作
+
+已将 translator 从手动 `npm start` 进程切换为 systemd 服务：
+
+```text
+codex-translator.service
+```
+
+服务文件：
+
+```text
+/etc/systemd/system/codex-translator.service
+```
+
+仓库内同步保存了一份部署副本：
+
+```text
+deploy/codex-translator.service
+```
+
+启用命令已执行：
+
+```bash
+systemctl daemon-reload
+systemctl enable codex-translator.service
+systemctl restart codex-translator.service
+```
+
+### 当前服务状态
+
+```text
+Active: active (running)
+Main PID: /usr/bin/node /data/translator/src/index.ts
+Listen: 127.0.0.1:3002
+```
+
+健康检查：
+
+```bash
+curl http://127.0.0.1:3002/healthz
+```
+
+返回：
+
+```json
+{"ok":true,"service":"codex-responses-translator","version":"0.1.0"}
+```
+
+### 验证
+
+单元测试：
+
+```bash
+npm test
+```
+
+结果：5/5 pass。
+
+语法检查：
+
+```bash
+npm run check
+```
+
+结果：通过。
+
+Codex 实测：
+
+```bash
+codex exec --ephemeral --skip-git-repo-check -C /data/workspace 'Reply exactly: pong'
+```
+
+结果：通过 translator 返回 `pong`。
+
+Codex Doctor：
+
+```text
+Configuration: config loaded
+Connectivity: active provider endpoints are reachable over HTTP
+0 fail
+```
+
+### 边界
+
+- 未重启 OpenClaw Gateway。
+- 未停止或删除 NewAPI。
+- 仅停止旧的手动 translator 进程，并由 systemd 接管同一服务。
+- `.env` 仍然只保存在本机且被 gitignore。

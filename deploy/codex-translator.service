@@ -1,0 +1,21 @@
+[Unit]
+Description=Codex Responses Translator
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/data/translator
+EnvironmentFile=/data/translator/.env
+ExecStart=/usr/bin/node /data/translator/src/index.ts
+Restart=on-failure
+RestartSec=3
+User=root
+Group=root
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/data/translator
+
+[Install]
+WantedBy=multi-user.target
