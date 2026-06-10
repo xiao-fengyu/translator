@@ -87,8 +87,43 @@ function inputItemToMessages(item: unknown): ChatMessage[] {
 
   // Responses API often sends { type: 'message', role, content: [...] }.
   if ('content' in obj) {
-    const content = stringifyContent(obj.content).trim();
-    return content ? [{ role, content }] : [];
+    const content = obj.content;
+    // If content is an array, check for multimodal parts (images, files).
+    if (Array.isArray(content)) {
+      const parts: Array<Record<string, unknown>> = [];
+      let hasMultimodal = false;
+      for (const part of content) {
+        if (part == null || typeof part !== 'object') continue;
+        const p = part as Record<string, unknown>;
+        const partType = typeof p.type === 'string' ? p.type : '';
+        if (partType === 'input_image') {
+          hasMultimodal = true;
+          const imageUrl = typeof p.image_url === 'string' ? p.image_url : typeof p.image_url?.url === 'string' ? p.image_url.url : '';
+          if (imageUrl) {
+            parts.push({ type: 'image_url', image_url: { url: imageUrl } });
+          }
+        } else if (partType === 'input_file') {
+          // Best-effort: try to extract base64 or file data.
+          const fileData = typeof p.file_data === 'string' ? p.file_data : typeof p.content === 'string' ? p.content : '';
+          if (fileData) {
+            hasMultimodal = true;
+            parts.push({ type: 'text', text: fileData });
+          }
+        } else {
+          const text = stringifyContent(p);
+          if (text) parts.push({ type: 'text', text });
+        }
+      }
+      if (hasMultimodal) {
+        return parts.length > 0 ? [{ role, content: parts }] : [];
+      }
+      // Fallback: no multimodal parts detected, join as plain text.
+      const text = stringifyContent(content).trim();
+      return text ? [{ role, content: text }] : [];
+    }
+    // Single-value content.
+    const text = stringifyContent(content).trim();
+    return text ? [{ role, content: text }] : [];
   }
 
   // Some Codex items may be typed text fragments.
@@ -97,7 +132,12 @@ function inputItemToMessages(item: unknown): ChatMessage[] {
 }
 
 function inputToMessages(input: unknown): ChatMessage[] {
-  const messages = inputItemToMessages(input).filter((m) => m.content === null || (m.content || '').trim() || m.tool_calls?.length);
+  const messages = inputItemToMessages(input).filter((m) => {
+    if (m.content === null) return !!m.tool_calls?.length;
+    if (Array.isArray(m.content)) return m.content.length > 0;
+    if (typeof m.content === 'string') return m.content.trim() !== '' || !!m.tool_calls?.length;
+    return true;
+  });
   return messages.length > 0 ? messages : [{ role: 'user', content: '' }];
 }
 

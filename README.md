@@ -241,6 +241,7 @@ Implemented translation:
 - Responses `function_call_output` to Chat Completions tool messages.
 - Minimal in-memory `previous_response_id` reuse for recent non-streaming conversations in the same translator process.
 - Disk-persisted `previous_response_id` context store: recent non-streaming conversations survive translator restarts (JSON file in `data/response-contexts.json`, capped at 200 entries).
+- Multimodal input: Responses `input_image` content parts are converted to Chat Completions `image_url` multimodal messages (supports both URL and base64 data URIs).
 - Chat Completions text to Responses `message` / `output_text`.
 - Chat Completions `tool_calls` to Responses `function_call` output items.
 - Streaming text deltas to Responses SSE text events.
@@ -252,7 +253,7 @@ Implemented translation:
 Known limitations:
 
 - `/v1/responses/compact` is implemented as a minimal compatibility shape, not full OpenAI compaction semantics.
-- Image and multimodal input are not implemented.
+- Image input is now supported for `input_image` content parts with URL or base64 data URI.
 - Full conversation store semantics (`store: true`, cross-process querying, arbitrary historical `previous_response_id` lookup) are not implemented.
 - `previous_response_id` disk store only preserves recent non-streaming responses within a capped local JSON file; it is not a full history database.
 - Streaming mid-flight failures are now structured, but still do not preserve raw upstream event ordering/state for full forensic replay.
@@ -376,6 +377,7 @@ Ignored runtime files:
 - `current` — Hardened streaming `response.failed` events with structured codes for malformed chunks, interruptions, and timeouts.
 - `current` — Added minimal in-memory `previous_response_id` conversation reuse for recent non-streaming requests.
 - `current` — Upgraded `previous_response_id` to a disk-backed JSON store; context survives translator restarts (capped at 200 entries, stored in `data/response-contexts.json`).
+- `current` — Added multimodal input support: `input_image` content parts with URL or base64 data URI are converted to Chat Completions `image_url` multimodal messages.
 
 ## Operational Rules
 

@@ -142,3 +142,53 @@ test('persists context to disk and survives in-memory reset (simulated restart)'
   // Cleanup test data
   clearResponseContexts();
 });
+
+test('converts image_url content to chat completions multimodal message', () => {
+  clearResponseContexts();
+  const result = responsesToChat({
+    model: 'm',
+    input: [
+      { type: 'message', role: 'user', content: [
+        { type: 'input_text', text: 'describe this image' },
+        { type: 'input_image', image_url: { url: 'https://example.com/cat.jpg' } },
+      ] },
+    ],
+  });
+  assert.equal(result.messages.length, 1);
+  assert.equal(result.messages[0].role, 'user');
+  assert.ok(Array.isArray(result.messages[0].content));
+  const parts = result.messages[0].content as any[];
+  assert.equal(parts[0].type, 'text');
+  assert.equal(parts[0].text, 'describe this image');
+  assert.equal(parts[1].type, 'image_url');
+  assert.equal(parts[1].image_url.url, 'https://example.com/cat.jpg');
+});
+
+test('converts base64 image_url content', () => {
+  clearResponseContexts();
+  const result = responsesToChat({
+    model: 'm',
+    input: [
+      { type: 'message', role: 'user', content: [
+        { type: 'input_image', image_url: 'data:image/png;base64,ABC123' },
+      ] },
+    ],
+  });
+  const parts = result.messages[0].content as any[];
+  assert.equal(parts.length, 1);
+  assert.equal(parts[0].type, 'image_url');
+  assert.equal(parts[0].image_url.url, 'data:image/png;base64,ABC123');
+});
+
+test('falls back to plain text when no image_url in content array', () => {
+  clearResponseContexts();
+  const result = responsesToChat({
+    model: 'm',
+    input: [
+      { type: 'message', role: 'user', content: [
+        { type: 'output_text', text: 'hello back' },
+      ] },
+    ],
+  });
+  assert.equal(result.messages[0].content, 'hello back');
+});
