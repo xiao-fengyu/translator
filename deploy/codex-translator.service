@@ -1,3 +1,19 @@
+# Codex Responses Translator — systemd 服务模板
+#
+# 部署步骤：
+# 1. 将本文件复制到 /etc/systemd/system/codex-translator.service
+# 2. 将所有 @PROJECT_ROOT@ 替换为你的实际部署路径（例如 /opt/translator 或 /data/translator）
+# 3. 替换 @USER@ 和 @GROUP@ 为运行服务的用户/组
+# 4. 确保 @PROJECT_ROOT@/.env 已存在（参考 .env.example）
+# 5. 执行：systemctl daemon-reload && systemctl enable codex-translator.service && systemctl restart codex-translator.service
+#
+# 一键替换示例（以 /data/translator 为例）：
+#   sed -e 's|@PROJECT_ROOT@|/data/translator|g' \
+#       -e 's|@USER@|root|g' -e 's|@GROUP@|root|g' \
+#       deploy/codex-translator.service \
+#       > /tmp/codex-translator.service
+#   sudo cp /tmp/codex-translator.service /etc/systemd/system/codex-translator.service
+
 [Unit]
 Description=Codex Responses Translator
 After=network-online.target
@@ -5,17 +21,17 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=/data/translator
-EnvironmentFile=/data/translator/.env
-ExecStart=/usr/bin/node /data/translator/src/index.ts
+WorkingDirectory=@PROJECT_ROOT@
+EnvironmentFile=@PROJECT_ROOT@/.env
+ExecStart=/usr/bin/node @PROJECT_ROOT@/src/index.ts
 Restart=on-failure
 RestartSec=3
-User=root
-Group=root
+User=@USER@
+Group=@GROUP@
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
-ReadWritePaths=/data/translator
+ReadWritePaths=@PROJECT_ROOT@
 
 [Install]
 WantedBy=multi-user.target

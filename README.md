@@ -186,23 +186,29 @@ deploy/codex-translator.service
 
 安装或刷新服务文件：
 
+服务文件是模板，需要先替换占位符。以部署到 `/data/translator` 为例：
+
 ```bash
-cp /data/translator/deploy/codex-translator.service /etc/systemd/system/codex-translator.service
+sed -e 's|@PROJECT_ROOT@|/data/translator|g' \
+    -e 's|@USER@|root|g' -e 's|@GROUP@|root|g' \
+    deploy/codex-translator.service \
+    | sudo tee /etc/systemd/system/codex-translator.service > /dev/null
 systemctl daemon-reload
 systemctl enable codex-translator.service
 systemctl restart codex-translator.service
 ```
+
+如果你把项目放在其他路径（例如 `/opt/translator`），只需替换第一行 sed 中的路径即可。
 
 ### 2. 手动运行
 
 仅用于本地调试：
 
 ```bash
-cd /data/translator
 npm start
 ```
 
-辅助脚本：
+辅助脚本（已改为基于脚本自身目录推导路径，可 clone 到任意目录运行）：
 
 ```bash
 ./scripts/start.sh
@@ -393,7 +399,53 @@ git push origin HEAD:main
 - 归档前本地 `HEAD` 与 `origin/main` 一致
 - 本次主要变更是将 `README.md` 重新整理为中文归档版
 
-## 十六、操作约束
+## 十六、新服务器部署清单
+
+在一台全新的服务器上从零部署 translator，按以下顺序执行：
+
+```bash
+# 1. 前置条件：Node.js >= 22
+node --version   # 应输出 v22.x.x 或更高
+
+# 2. 克隆仓库
+git clone git@github.com:xiao-fengyu/translator.git
+cd translator
+
+# 3. 安装依赖
+npm install
+
+# 4. 创建配置文件
+cp .env.example .env
+chmod 600 .env
+# 编辑 .env，填入真实的 UPSTREAM_BASE_URL 和 UPSTREAM_API_KEY
+
+# 5. 验证测试
+npm test          # 应 29/29 通过
+npm run healthcheck
+
+# 6a. 方案 A：手动启动（临时测试）
+./scripts/start.sh
+curl http://127.0.0.1:3000/healthz
+
+# 6b. 方案 B：systemd 部署（生产推荐）
+# 替换 deploy/codex-translator.service 中的占位符后安装
+sed -e 's|@PROJECT_ROOT@|'"$(pwd)"'|g' \
+    -e 's|@USER@|root|g' -e 's|@GROUP@|root|g' \
+    deploy/codex-translator.service \
+    | sudo tee /etc/systemd/system/codex-translator.service > /dev/null
+sudo systemctl daemon-reload
+sudo systemctl enable codex-translator.service
+sudo systemctl restart codex-translator.service
+sudo systemctl status codex-translator.service
+
+# 7. 配置 Codex 接入（~/.codex/config.toml）
+# 参考本文档「六、Codex 接入方式」
+
+# 8. 冒烟测试
+codex exec --ephemeral --skip-git-repo-check -C /tmp 'Reply exactly: pong'
+```
+
+## 十七、操作约束
 
 - 不要擅自重启 OpenClaw Gateway。
 - 不要打印或提交 API key。
