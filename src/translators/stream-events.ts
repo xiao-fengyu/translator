@@ -1,5 +1,6 @@
 import { TextDecoder, TextEncoder } from 'node:util';
 import { splitNamespacedToolName } from './namespaced-tools.ts';
+import { isFreeformToolName, unwrapFreeformArguments } from './freeform-tools.ts';
 import {
   makeGenericStreamFailure,
   makeStreamInterruptedError,
@@ -42,6 +43,16 @@ function extractToolCallDeltas(chunk: any): any[] {
 
 function responseToolCallItem(call: StreamToolCallState): any {
   const splitName = splitNamespacedToolName(call.name || 'unknown_function');
+  if (isFreeformToolName(splitName.name)) {
+    return {
+      id: call.id,
+      type: 'custom_tool_call',
+      status: 'completed',
+      call_id: call.id,
+      ...splitName,
+      input: unwrapFreeformArguments(call.arguments || ''),
+    };
+  }
   return {
     id: call.id,
     type: 'function_call',
@@ -176,19 +187,20 @@ export function makeResponsesStream(upstreamBody: ReadableStream<Uint8Array>, mo
                   output_index: state.outputIndex,
                   item: {
                     id: state.id,
-                    type: 'function_call',
+                    type: isFreeformToolName(state.name) ? 'custom_tool_call' : 'function_call',
                     status: 'in_progress',
                     call_id: state.id,
                     ...splitNamespacedToolName(state.name || 'unknown_function'),
-                    arguments: '',
+                    ...(isFreeformToolName(state.name) ? { input: '' } : { arguments: '' }),
                   },
                 });
                 state.added = true;
               }
               if (argsDelta) {
                 state.arguments += argsDelta;
-                send('response.function_call_arguments.delta', {
-                  type: 'response.function_call_arguments.delta',
+                if (isFreeformToolName(state.name)) continue;
+                send(isFreeformToolName(state.name) ? 'response.custom_tool_call_input.delta' : 'response.function_call_arguments.delta', {
+                  type: isFreeformToolName(state.name) ? 'response.custom_tool_call_input.delta' : 'response.function_call_arguments.delta',
                   item_id: state.id,
                   output_index: state.outputIndex,
                   delta: argsDelta,
@@ -238,12 +250,14 @@ export function makeResponsesStream(upstreamBody: ReadableStream<Uint8Array>, mo
         }
         for (const state of toolCalls.values()) {
           const item = responseToolCallItem(state);
-          send('response.function_call_arguments.done', {
-            type: 'response.function_call_arguments.done',
-            item_id: state.id,
-            output_index: state.outputIndex,
-            arguments: item.arguments,
-          });
+          if (!isFreeformToolName(state.name)) {
+            send('response.function_call_arguments.done', {
+              type: 'response.function_call_arguments.done',
+              item_id: state.id,
+              output_index: state.outputIndex,
+              arguments: item.arguments,
+            });
+          }
           send('response.output_item.done', {
             type: 'response.output_item.done',
             output_index: state.outputIndex,

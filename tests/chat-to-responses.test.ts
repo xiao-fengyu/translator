@@ -46,7 +46,7 @@ test('wraps chat tool calls as responses function_call output', () => {
   });
 });
 
-test('preserves apply_patch chat function input object for Codex router', () => {
+test('maps apply_patch chat function input to custom tool call for Codex router', () => {
   const patch = '*** Begin Patch\n*** Add File: x.txt\n+hi\n*** End Patch';
   const wrapped = JSON.stringify({ input: patch });
   const result = chatToResponses({
@@ -61,11 +61,11 @@ test('preserves apply_patch chat function input object for Codex router', () => 
   }, 'm');
   assert.deepEqual(result.output[0], {
     id: 'call_patch',
-    type: 'function_call',
+    type: 'custom_tool_call',
     status: 'completed',
     call_id: 'call_patch',
     name: 'apply_patch',
-    arguments: wrapped,
+    input: patch,
   });
 });
 

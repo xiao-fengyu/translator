@@ -73,7 +73,7 @@ test('makeResponsesStream emits namespace for flattened mcp tool calls', async (
   assert.match(out, /"call_id":"call_mcp"/);
 });
 
-test('makeResponsesStream preserves final apply_patch input object', async () => {
+test('makeResponsesStream maps final apply_patch input to custom tool call', async () => {
   const patch = '*** Begin Patch\n*** Add File: x.txt\n+hi\n*** End Patch';
   const wrapped = JSON.stringify({ input: patch });
   const upstream = makeUpstreamSSE([
@@ -86,8 +86,10 @@ test('makeResponsesStream preserves final apply_patch input object', async () =>
   const out = await collectStream(makeResponsesStream(upstream, 'm'));
 
   assert.match(out, /"name":"apply_patch"/);
-  assert.ok(out.includes('\\"input\\"'));
-  assert.ok(out.includes('+hi'));
+  assert.match(out, /"type":"custom_tool_call"/);
+  assert.match(out, /event: response\.output_item\.done/);
+  assert.doesNotMatch(out, /response\.function_call_arguments/);
+  assert.ok(out.includes('"input":"*** Begin Patch\\n*** Add File: x.txt\\n+hi\\n*** End Patch"'));
 });
 
 test('makeResponsesStream emits structured failed event for malformed upstream JSON', async () => {
