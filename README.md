@@ -9,6 +9,7 @@ Codex CLI
   -> https://openclawroot.com/v1/chat/completions
 ```
 
+- 使用文档：[`USAGE.md`](./USAGE.md)
 - 本地路径：`/data/translator`
 - GitHub：`https://github.com/xiao-fengyu/translator`
 - 当前分支：本地 `master`，跟踪远端 `origin/main`
@@ -63,6 +64,7 @@ Codex CLI
 - `src/translators/compact-response.ts`：`/v1/responses/compact` 最小兼容处理
 - `src/translators/stream-events.ts`：流式事件转换
 - `src/translators/stream-errors.ts`：流式失败事件结构化
+- `src/translators/namespaced-tools.ts`：MCP 等带命名空间工具名的扁平化与还原
 - `src/upstream/openai-compatible.ts`：上游 OpenAI-compatible 请求封装
 
 ## 四、目录归档
@@ -72,6 +74,7 @@ Codex CLI
 ```text
 /data/translator/
 ├── README.md
+├── USAGE.md
 ├── package.json
 ├── .env.example
 ├── .gitignore
@@ -92,7 +95,8 @@ Codex CLI
 │   │   ├── compact-response.ts
 │   │   ├── responses-to-chat.ts
 │   │   ├── stream-errors.ts
-│   │   └── stream-events.ts
+│   │   ├── stream-events.ts
+│   │   └── namespaced-tools.ts
 │   ├── types/
 │   │   ├── chat.ts
 │   │   └── responses.ts
@@ -103,7 +107,8 @@ Codex CLI
     ├── compact-response.test.ts
     ├── errors.test.ts
     ├── responses-to-chat.test.ts
-    └── stream-events.test.ts
+    ├── stream-events.test.ts
+    └── upstream-openai-compatible.test.ts
 ```
 
 说明：
