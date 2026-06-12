@@ -190,7 +190,8 @@ export function responsesToChat(request: ResponsesRequest): ChatCompletionsReque
     if (tools.length > 0) chatRequest.tools = tools;
   }
   if (request.tool_choice !== undefined) chatRequest.tool_choice = responseToolChoiceToChatToolChoice(request.tool_choice);
-  if (typeof request.parallel_tool_calls === 'boolean') chatRequest.parallel_tool_calls = request.parallel_tool_calls;
+  // Do not forward parallel_tool_calls — upstream rejects it with 400.
+  // The translator proxies single requests, so parallel semantics are not applicable.
 
   return chatRequest;
 }

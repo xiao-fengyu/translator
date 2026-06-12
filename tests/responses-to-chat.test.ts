@@ -65,7 +65,8 @@ test('maps responses function tools to chat tools', () => {
     { type: 'function', function: { name: 'shell', description: 'Run shell', parameters: { type: 'object' } } },
   ]);
   assert.deepEqual(result.tool_choice, { type: 'function', function: { name: 'shell' } });
-  assert.equal(result.parallel_tool_calls, false);
+  // parallel_tool_calls is intentionally not forwarded (upstream rejects it with 400)
+  assert.equal(result.parallel_tool_calls, undefined);
 });
 
 test('flattens responses namespace tools to chat function tools', () => {
