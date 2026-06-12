@@ -30,7 +30,7 @@ function optionalInt(name: string, fallback: number): number {
   const raw = process.env[name];
   if (!raw) return fallback;
   const parsed = Number.parseInt(raw, 10);
-  if (!Number.isFinite(parsed)) return fallback;
+  if (!Number.isFinite(parsed) || parsed < 0) return fallback;
   return parsed;
 }
 
@@ -44,6 +44,8 @@ export const config = {
   upstreamBaseUrl: normalizeBaseUrl(required('UPSTREAM_BASE_URL')),
   upstreamApiKey: required('UPSTREAM_API_KEY'),
   upstreamTimeoutMs: optionalInt('UPSTREAM_TIMEOUT_MS', 120_000),
+  upstreamRetries: optionalInt('UPSTREAM_RETRIES', 2),
+  upstreamRetryBaseDelayMs: optionalInt('UPSTREAM_RETRY_BASE_DELAY_MS', 800),
   models: (process.env.TRANSLATOR_MODELS || 'claude-opus-4-7')
     .split(',')
     .map((m) => m.trim())

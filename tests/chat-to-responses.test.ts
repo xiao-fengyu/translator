@@ -46,6 +46,28 @@ test('wraps chat tool calls as responses function_call output', () => {
   });
 });
 
+test('wraps flattened mcp tool calls with responses namespace', () => {
+  const result = chatToResponses({
+    id: 'chat_mcp_1',
+    model: 'm',
+    choices: [{
+      message: {
+        content: null,
+        tool_calls: [{ id: 'call_mcp_1', type: 'function', function: { name: 'mcp__memory__read_graph', arguments: '{}' } }],
+      },
+    }],
+  }, 'm');
+  assert.deepEqual(result.output[0], {
+    id: 'call_mcp_1',
+    type: 'function_call',
+    status: 'completed',
+    call_id: 'call_mcp_1',
+    namespace: 'mcp__memory',
+    name: 'read_graph',
+    arguments: '{}',
+  });
+});
+
 test('wraps chat response with both content and tool_calls as message + function_call', () => {
   const result = chatToResponses({
     id: 'chat_mixed_1',

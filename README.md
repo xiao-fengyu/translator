@@ -132,6 +132,8 @@ UPSTREAM_API_KEY=replace-me
 TRANSLATOR_MODELS=claude-opus-4-7,gpt-5.5,qwen3.6-plus,gemini-2.5-flash
 DEFAULT_MODEL=claude-opus-4-7
 UPSTREAM_TIMEOUT_MS=120000
+UPSTREAM_RETRIES=2
+UPSTREAM_RETRY_BASE_DELAY_MS=800
 ```
 
 注意：
@@ -139,6 +141,7 @@ UPSTREAM_TIMEOUT_MS=120000
 - `.env` 包含密钥，禁止提交到 GitHub。
 - `.env.example` 只保留占位符，可提交。
 - `UPSTREAM_BASE_URL` 应指向以 `/v1` 结尾的 OpenAI-compatible 根地址。
+- `UPSTREAM_RETRIES` 仅用于上游 429/502/503/504、连接异常、超时等瞬时故障；如果上游已经开始返回 SSE body，中途断流不会重放，避免重复工具调用。
 
 ## 六、Codex 接入方式
 
@@ -215,6 +218,13 @@ npm start
 ./scripts/stop.sh
 ```
 
+脚本行为：
+
+- `start.sh` 会先检测 `codex-translator.service` 是否已经 active；若已 active，不会重复启动。
+- 如果 `3000` 端口已被现有 translator 占用，`start.sh` 会输出占用 PID 并拒绝再启动一份，避免 `EADDRINUSE` 和错误 pid 文件。
+- 如果 systemd unit 存在且当前没有监听进程，`start.sh` 会优先通过 systemd 启动。
+- `stop.sh` 优先停止 systemd 服务；手动进程只会在 cwd 确认为当前项目目录时被杀掉，避免误杀其他 Node 项目。
+
 不要在 `3000` 端口上同时运行 systemd 实例和手动实例。
 
 ## 八、健康检查与验证
@@ -238,6 +248,14 @@ npm run check
 npm test
 npm run healthcheck
 ```
+
+如需验证 translator 到上游模型的真实链路，可启用深度检查：
+
+```bash
+TRANSLATOR_DEEP_CHECK=1 npm run healthcheck
+```
+
+说明：基础 `healthcheck` 只验证本地 translator 进程健康；深度检查会调用 `/v1/responses`，可能受上游限流、503、网络抖动影响，因此不建议作为 systemd 强制重启条件。
 
 ### 3. Codex 冒烟测试
 
@@ -297,6 +315,7 @@ rm -f /data/translator/.codex-tool-test.txt
 - tool-call 双向映射可用
 - 流式 tool-call delta 可用
 - 非流式错误映射可用
+- 上游 429/502/503/504、连接异常、超时具备轻量重试容错
 - 流式失败事件结构化可用
 - `previous_response_id` 续接已扩展为磁盘持久化
 - 多模态 `input_image` 输入已支持

@@ -68,6 +68,27 @@ test('maps responses function tools to chat tools', () => {
   assert.equal(result.parallel_tool_calls, false);
 });
 
+test('flattens responses namespace tools to chat function tools', () => {
+  clearResponseContexts();
+  const result = responsesToChat({
+    model: 'm',
+    input: 'use memory',
+    tools: [{
+      type: 'namespace',
+      name: 'mcp__memory',
+      description: 'Memory tools',
+      tools: [
+        { type: 'function', name: 'read_graph', description: 'Read graph', parameters: { type: 'object', properties: {} } },
+        { type: 'function', name: 'search_nodes', description: 'Search nodes', parameters: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] } },
+      ],
+    }],
+  });
+  assert.deepEqual(result.tools, [
+    { type: 'function', function: { name: 'mcp__memory__read_graph', description: 'Read graph', parameters: { type: 'object', properties: {} } } },
+    { type: 'function', function: { name: 'mcp__memory__search_nodes', description: 'Search nodes', parameters: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] } } },
+  ]);
+});
+
 test('maps responses function call history and output to chat messages', () => {
   clearResponseContexts();
   const result = responsesToChat({

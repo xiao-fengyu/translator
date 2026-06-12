@@ -58,6 +58,21 @@ test('makeResponsesStream emits tool_call events for streamed tool_calls deltas'
   assert.match(out, /"arguments":"\{\\"cmd\\":\\"pwd\\"\}"/);
 });
 
+test('makeResponsesStream emits namespace for flattened mcp tool calls', async () => {
+  const upstream = makeUpstreamSSE([
+    'data: {"id":"chatcmpl_1","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_mcp","type":"function","function":{"name":"mcp__memory__read_graph","arguments":""}}]}}]}\n\n',
+    'data: {"id":"chatcmpl_1","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{}"}}]}}]}\n\n',
+    'data: {"id":"chatcmpl_1","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}\n\n',
+    'data: [DONE]\n\n',
+  ]);
+
+  const out = await collectStream(makeResponsesStream(upstream, 'm'));
+
+  assert.match(out, /"namespace":"mcp__memory"/);
+  assert.match(out, /"name":"read_graph"/);
+  assert.match(out, /"call_id":"call_mcp"/);
+});
+
 test('makeResponsesStream emits structured failed event for malformed upstream JSON', async () => {
   const upstream = makeUpstreamSSE([
     'data: {"choices":[{"delta":{"content":"ok"}}]}\n\n',

@@ -2,6 +2,7 @@ import { config } from '../config.ts';
 import { getResponseContext } from '../response-context-store.ts';
 import type { ChatCompletionsRequest, ChatMessage, ChatTool } from '../types/chat.ts';
 import type { ResponsesRequest, ResponsesTool } from '../types/responses.ts';
+import { flattenNamespacedToolName } from './namespaced-tools.ts';
 
 function stringifyContent(value: unknown): string {
   if (value == null) return '';
@@ -29,18 +30,34 @@ function instructionToSystemMessage(instructions: unknown): ChatMessage[] {
   return content ? [{ role: 'system', content }] : [];
 }
 
-function responseToolToChatTool(tool: ResponsesTool): ChatTool | null {
+function responseToolToChatTools(tool: ResponsesTool): ChatTool[] {
+  if (tool.type === 'namespace' && typeof tool.name === 'string' && Array.isArray(tool.tools)) {
+    return tool.tools.flatMap((innerTool) => {
+      const fn = innerTool.function || innerTool;
+      const innerName = typeof fn.name === 'string' ? fn.name : '';
+      if (!innerName) return [];
+      return [{
+        type: 'function' as const,
+        function: {
+          name: flattenNamespacedToolName(tool.name!, innerName),
+          description: typeof fn.description === 'string' ? fn.description : undefined,
+          parameters: fn.parameters || {},
+        },
+      }];
+    });
+  }
+
   const fn = tool.function || tool;
   const name = typeof fn.name === 'string' ? fn.name : '';
-  if (!name) return null;
-  return {
+  if (!name) return [];
+  return [{
     type: 'function',
     function: {
       name,
       description: typeof fn.description === 'string' ? fn.description : undefined,
       parameters: fn.parameters || {},
     },
-  };
+  }];
 }
 
 function responseToolChoiceToChatToolChoice(choice: unknown): unknown {
@@ -165,7 +182,7 @@ export function responsesToChat(request: ResponsesRequest): ChatCompletionsReque
   if (typeof request.max_output_tokens === 'number') chatRequest.max_tokens = request.max_output_tokens;
   if (typeof request.max_completion_tokens === 'number') chatRequest.max_completion_tokens = request.max_completion_tokens;
   if (Array.isArray(request.tools)) {
-    const tools = request.tools.map(responseToolToChatTool).filter((tool): tool is ChatTool => Boolean(tool));
+    const tools = request.tools.flatMap(responseToolToChatTools);
     if (tools.length > 0) chatRequest.tools = tools;
   }
   if (request.tool_choice !== undefined) chatRequest.tool_choice = responseToolChoiceToChatToolChoice(request.tool_choice);
@@ -174,4 +191,4 @@ export function responsesToChat(request: ResponsesRequest): ChatCompletionsReque
   return chatRequest;
 }
 
-export const internals = { stringifyContent, inputToMessages, responseToolToChatTool, responseToolChoiceToChatToolChoice, mergePreviousMessages };
+export const internals = { stringifyContent, inputToMessages, responseToolToChatTools, responseToolChoiceToChatToolChoice, mergePreviousMessages };

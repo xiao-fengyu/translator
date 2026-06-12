@@ -1,4 +1,5 @@
 import { TextDecoder, TextEncoder } from 'node:util';
+import { splitNamespacedToolName } from './namespaced-tools.ts';
 import {
   makeGenericStreamFailure,
   makeStreamInterruptedError,
@@ -56,7 +57,7 @@ function responseSnapshot(id: string, model: string, status: string, outputText 
       type: 'function_call',
       status: 'completed',
       call_id: call.id,
-      name: call.name || 'unknown_function',
+      ...splitNamespacedToolName(call.name || 'unknown_function'),
       arguments: call.arguments || '',
     });
   }
@@ -173,7 +174,7 @@ export function makeResponsesStream(upstreamBody: ReadableStream<Uint8Array>, mo
                     type: 'function_call',
                     status: 'in_progress',
                     call_id: state.id,
-                    name: state.name || 'unknown_function',
+                    ...splitNamespacedToolName(state.name || 'unknown_function'),
                     arguments: '',
                   },
                 });
@@ -245,7 +246,7 @@ export function makeResponsesStream(upstreamBody: ReadableStream<Uint8Array>, mo
               type: 'function_call',
               status: 'completed',
               call_id: state.id,
-              name: state.name || 'unknown_function',
+              ...splitNamespacedToolName(state.name || 'unknown_function'),
               arguments: state.arguments,
             },
           });

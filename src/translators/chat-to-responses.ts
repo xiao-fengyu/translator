@@ -1,3 +1,4 @@
+import { splitNamespacedToolName } from './namespaced-tools.ts';
 function responseId(): string {
   return `resp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
@@ -34,7 +35,7 @@ function chatToolCallToResponseOutput(toolCall: any, index: number): any {
     type: 'function_call',
     status: 'completed',
     call_id: id,
-    name: typeof fn.name === 'string' ? fn.name : 'unknown_function',
+    ...splitNamespacedToolName(typeof fn.name === 'string' ? fn.name : 'unknown_function'),
     arguments: stringifyToolArguments(fn.arguments),
   };
 }

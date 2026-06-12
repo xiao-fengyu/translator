@@ -9,6 +9,7 @@ export interface ResponsesTool {
     description?: string;
     parameters?: unknown;
   };
+  tools?: ResponsesTool[];
 }
 
 export interface ResponsesRequest {
