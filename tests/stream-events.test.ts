@@ -73,6 +73,23 @@ test('makeResponsesStream emits namespace for flattened mcp tool calls', async (
   assert.match(out, /"call_id":"call_mcp"/);
 });
 
+test('makeResponsesStream preserves final apply_patch input object', async () => {
+  const patch = '*** Begin Patch\n*** Add File: x.txt\n+hi\n*** End Patch';
+  const wrapped = JSON.stringify({ input: patch });
+  const upstream = makeUpstreamSSE([
+    'data: ' + JSON.stringify({ id: 'chatcmpl_1', choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: 'call_patch', type: 'function', function: { name: 'apply_patch', arguments: '' } }] } }] }) + '\n\n',
+    'data: ' + JSON.stringify({ id: 'chatcmpl_1', choices: [{ index: 0, delta: { tool_calls: [{ index: 0, function: { arguments: wrapped } }] } }] }) + '\n\n',
+    'data: {"id":"chatcmpl_1","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}\n\n',
+    'data: [DONE]\n\n',
+  ]);
+
+  const out = await collectStream(makeResponsesStream(upstream, 'm'));
+
+  assert.match(out, /"name":"apply_patch"/);
+  assert.ok(out.includes('\\"input\\"'));
+  assert.ok(out.includes('+hi'));
+});
+
 test('makeResponsesStream emits structured failed event for malformed upstream JSON', async () => {
   const upstream = makeUpstreamSSE([
     'data: {"choices":[{"delta":{"content":"ok"}}]}\n\n',

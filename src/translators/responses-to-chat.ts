@@ -3,6 +3,7 @@ import { getResponseContext } from '../response-context-store.ts';
 import type { ChatCompletionsRequest, ChatMessage, ChatTool } from '../types/chat.ts';
 import type { ResponsesRequest, ResponsesTool } from '../types/responses.ts';
 import { flattenNamespacedToolName } from './namespaced-tools.ts';
+import { freeformToolParameters, hasFreeformToolShape, isFreeformToolName, wrapFreeformArguments } from './freeform-tools.ts';
 
 function stringifyContent(value: unknown): string {
   if (value == null) return '';
@@ -36,12 +37,13 @@ function responseToolToChatTools(tool: ResponsesTool): ChatTool[] {
       const fn = innerTool.function || innerTool;
       const innerName = typeof fn.name === 'string' ? fn.name : '';
       if (!innerName) return [];
+      const freeform = hasFreeformToolShape(innerTool);
       return [{
         type: 'function' as const,
         function: {
           name: flattenNamespacedToolName(tool.name!, innerName),
           description: typeof fn.description === 'string' ? fn.description : undefined,
-          parameters: fn.parameters || {},
+          parameters: freeform ? freeformToolParameters() : fn.parameters || {},
         },
       }];
     });
@@ -50,12 +52,13 @@ function responseToolToChatTools(tool: ResponsesTool): ChatTool[] {
   const fn = tool.function || tool;
   const name = typeof fn.name === 'string' ? fn.name : '';
   if (!name) return [];
+  const freeform = hasFreeformToolShape(tool);
   return [{
     type: 'function',
     function: {
       name,
       description: typeof fn.description === 'string' ? fn.description : undefined,
-      parameters: fn.parameters || {},
+      parameters: freeform ? freeformToolParameters() : fn.parameters || {},
     },
   }];
 }
@@ -64,7 +67,7 @@ function responseToolChoiceToChatToolChoice(choice: unknown): unknown {
   if (choice == null || typeof choice === 'string') return choice;
   if (typeof choice !== 'object') return choice;
   const obj = choice as Record<string, unknown>;
-  if (obj.type === 'function' && typeof obj.name === 'string') {
+  if ((obj.type === 'function' || obj.type === 'custom' || obj.type === 'freeform') && typeof obj.name === 'string') {
     return { type: 'function', function: { name: obj.name } };
   }
   return choice;
@@ -86,10 +89,11 @@ function inputItemToMessages(item: unknown): ChatMessage[] {
     const name = typeof obj.name === 'string' ? obj.name : 'unknown_function';
     const callId = typeof obj.call_id === 'string' ? obj.call_id : typeof obj.id === 'string' ? obj.id : `call_${name}`;
     const args = typeof obj.arguments === 'string' ? obj.arguments : JSON.stringify(obj.arguments ?? {});
+    const chatArgs = isFreeformToolName(name) ? wrapFreeformArguments(args) : args;
     return [{
       role: 'assistant',
       content: null,
-      tool_calls: [{ id: callId, type: 'function', function: { name, arguments: args } }],
+      tool_calls: [{ id: callId, type: 'function', function: { name, arguments: chatArgs } }],
     }];
   }
 

@@ -46,6 +46,29 @@ test('wraps chat tool calls as responses function_call output', () => {
   });
 });
 
+test('preserves apply_patch chat function input object for Codex router', () => {
+  const patch = '*** Begin Patch\n*** Add File: x.txt\n+hi\n*** End Patch';
+  const wrapped = JSON.stringify({ input: patch });
+  const result = chatToResponses({
+    id: 'chat_patch_1',
+    model: 'm',
+    choices: [{
+      message: {
+        content: null,
+        tool_calls: [{ id: 'call_patch', type: 'function', function: { name: 'apply_patch', arguments: wrapped } }],
+      },
+    }],
+  }, 'm');
+  assert.deepEqual(result.output[0], {
+    id: 'call_patch',
+    type: 'function_call',
+    status: 'completed',
+    call_id: 'call_patch',
+    name: 'apply_patch',
+    arguments: wrapped,
+  });
+});
+
 test('wraps flattened mcp tool calls with responses namespace', () => {
   const result = chatToResponses({
     id: 'chat_mcp_1',

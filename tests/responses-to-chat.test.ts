@@ -89,6 +89,52 @@ test('flattens responses namespace tools to chat function tools', () => {
   ]);
 });
 
+test('maps responses custom freeform tools to chat function tools', () => {
+  clearResponseContexts();
+  const result = responsesToChat({
+    model: 'm',
+    input: 'edit a file',
+    tools: [
+      { type: 'custom', name: 'apply_patch', description: 'Apply patch' },
+    ],
+    tool_choice: { type: 'custom', name: 'apply_patch' },
+  });
+  assert.deepEqual(result.tools, [
+    {
+      type: 'function',
+      function: {
+        name: 'apply_patch',
+        description: 'Apply patch',
+        parameters: {
+          type: 'object',
+          properties: { input: { type: 'string', description: 'Raw freeform input for the tool.' } },
+          required: ['input'],
+          additionalProperties: false,
+        },
+      },
+    },
+  ]);
+  assert.deepEqual(result.tool_choice, { type: 'function', function: { name: 'apply_patch' } });
+});
+
+test('wraps freeform function call history for chat function schema', () => {
+  clearResponseContexts();
+  const patch = '*** Begin Patch\n*** Add File: x.txt\n+hi\n*** End Patch';
+  const result = responsesToChat({
+    model: 'm',
+    input: [
+      { type: 'function_call', call_id: 'call_patch', name: 'apply_patch', arguments: patch },
+    ],
+  });
+  assert.deepEqual(result.messages, [
+    {
+      role: 'assistant',
+      content: null,
+      tool_calls: [{ id: 'call_patch', type: 'function', function: { name: 'apply_patch', arguments: JSON.stringify({ input: patch }) } }],
+    },
+  ]);
+});
+
 test('maps responses function call history and output to chat messages', () => {
   clearResponseContexts();
   const result = responsesToChat({

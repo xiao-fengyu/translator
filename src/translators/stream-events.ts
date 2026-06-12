@@ -40,6 +40,18 @@ function extractToolCallDeltas(chunk: any): any[] {
   return Array.isArray(calls) ? calls : [];
 }
 
+function responseToolCallItem(call: StreamToolCallState): any {
+  const splitName = splitNamespacedToolName(call.name || 'unknown_function');
+  return {
+    id: call.id,
+    type: 'function_call',
+    status: 'completed',
+    call_id: call.id,
+    ...splitName,
+    arguments: call.arguments || '',
+  };
+}
+
 function responseSnapshot(id: string, model: string, status: string, outputText = '', toolCalls: StreamToolCallState[] = []): any {
   const output: any[] = [];
   if (outputText) {
@@ -52,14 +64,7 @@ function responseSnapshot(id: string, model: string, status: string, outputText 
     });
   }
   for (const call of toolCalls) {
-    output.push({
-      id: call.id,
-      type: 'function_call',
-      status: 'completed',
-      call_id: call.id,
-      ...splitNamespacedToolName(call.name || 'unknown_function'),
-      arguments: call.arguments || '',
-    });
+    output.push(responseToolCallItem(call));
   }
   return {
     id,
@@ -232,23 +237,17 @@ export function makeResponsesStream(upstreamBody: ReadableStream<Uint8Array>, mo
           });
         }
         for (const state of toolCalls.values()) {
+          const item = responseToolCallItem(state);
           send('response.function_call_arguments.done', {
             type: 'response.function_call_arguments.done',
             item_id: state.id,
             output_index: state.outputIndex,
-            arguments: state.arguments,
+            arguments: item.arguments,
           });
           send('response.output_item.done', {
             type: 'response.output_item.done',
             output_index: state.outputIndex,
-            item: {
-              id: state.id,
-              type: 'function_call',
-              status: 'completed',
-              call_id: state.id,
-              ...splitNamespacedToolName(state.name || 'unknown_function'),
-              arguments: state.arguments,
-            },
+            item,
           });
         }
         send('response.completed', {
@@ -272,4 +271,4 @@ export function makeResponsesStream(upstreamBody: ReadableStream<Uint8Array>, mo
   });
 }
 
-export const internals = { extractDelta, extractToolCallDeltas, responseSnapshot, parseChunkData };
+export const internals = { extractDelta, extractToolCallDeltas, responseSnapshot, responseToolCallItem, parseChunkData };

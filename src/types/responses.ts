@@ -4,10 +4,13 @@ export interface ResponsesTool {
   description?: string;
   parameters?: unknown;
   strict?: boolean;
+  format?: unknown;
   function?: {
+    type?: string;
     name?: string;
     description?: string;
     parameters?: unknown;
+    format?: unknown;
   };
   tools?: ResponsesTool[];
 }
