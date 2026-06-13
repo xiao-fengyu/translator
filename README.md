@@ -302,7 +302,8 @@ rm -f /data/translator/.codex-tool-test.txt
 - `function_call_output` 转 tool messages
 - Chat Completions 文本转回 Responses `message` / `output_text`
 - Chat Completions `tool_calls` 转回 Responses `function_call`
-- Responses `custom` / freeform 工具可映射为 Chat function 的 `{ input: string }` 参数形态（当前用于 `apply_patch` 排查）
+- Responses `custom` / freeform 工具可映射为 Chat function 的 `{ input: string }` 参数形态，并在返回 Codex 时恢复为 `custom_tool_call` / `input`
+- `list_mcp_resources` / `read_mcp_resource` 工具描述会追加边界说明，降低模型误用 MCP resources 接口读取普通文件的概率
 - 流式文本 delta 转 Responses SSE 事件
 - 流式 tool-call argument delta 转 Responses SSE 事件
 - 非流式错误统一映射为稳定 translator 错误对象
@@ -325,7 +326,8 @@ rm -f /data/translator/.codex-tool-test.txt
 - 流式失败事件结构化可用
 - `previous_response_id` 续接已扩展为磁盘持久化
 - 多模态 `input_image` 输入已支持
-- `apply_patch` 不再被转换成空 `arguments: "{}"`；当前 translator 会保留 `{ "input": "*** Begin Patch..." }` 形态交给 Codex
+- `apply_patch` 已按 Codex freeform/custom 工具契约返回 `custom_tool_call` / `input`，真实 `codex exec` 冒烟验证通过
+- MCP resources 工具描述增强已覆盖，提示模型不要用 `read_mcp_resource` 读取任意 `file://` 路径或普通 filesystem 文件
 
 ## 十一、已知限制
 
@@ -333,7 +335,7 @@ rm -f /data/translator/.codex-tool-test.txt
 - 完整会话存储语义（如 `store: true`、跨实例查询、完整历史数据库）尚未实现。
 - 上下文存储仅在本机 translator 范围内有效，不支持多机共享。
 - 流式中途失败虽然已结构化，但还不保留完整上游原始事件顺序，无法做完全法证级回放。
-- `apply_patch` 的 translator 层已修复空参数问题，但 Codex core 仍可能返回 `tool apply_patch invoked with incompatible payload`；这类问题需要继续核对 Codex CLI 原生工具 router 的 payload 契约。
+- MCP resources 工具描述增强只能降低模型误选工具的概率；若上游模型仍调用 `read_mcp_resource` 访问不支持 resources 的 MCP server，调用仍会由 Codex/MCP 层返回 `Method not found`。
 
 ## 十二、故障排查
 
@@ -368,7 +370,8 @@ grep -E '^(model|model_provider) =|\[model_providers\.translator\]|base_url = "h
 - `connection refused 127.0.0.1:3000`：translator 未运行或端口冲突。
 - Codex 能聊天但不能改文件：通常说明 tool-call 映射异常或服务跑的是旧代码，应重启 `codex-translator.service` 并重跑测试。
 - `apply_patch arguments:"{}"`：说明 freeform/custom 工具参数仍被丢失，应检查 `freeform-tools.ts`、`responses-to-chat.ts` 和当前运行进程是否加载了新代码。
-- `tool apply_patch invoked with incompatible payload`：说明 patch 内容已经传到 Codex，但 Codex core 不接受当前 payload 形态，应继续对比 Codex CLI 原生 `apply_patch` router 契约。
+- `tool apply_patch invoked with incompatible payload`：通常说明服务仍在运行旧代码，未把 `apply_patch` 作为 Responses `custom_tool_call` / `input` 返回给 Codex；应重启服务并重跑真实 `codex exec` 冒烟。
+- `resources/read failed ... Method not found`：说明模型把 MCP resource 读取接口用于不支持 resources 的 server；应改用具体工具，例如 `mcp__filesystem__read_text_file`。
 - 日志出现密钥：应立刻轮换密钥，并检查 `.env` 与日志输出。
 
 ## 十三、NewAPI 替换结论

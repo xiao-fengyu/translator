@@ -69,6 +69,28 @@ test('maps responses function tools to chat tools', () => {
   assert.equal(result.parallel_tool_calls, undefined);
 });
 
+test('clarifies MCP resource tool descriptions for upstream model choice', () => {
+  clearResponseContexts();
+  const result = responsesToChat({
+    model: 'm',
+    input: 'read project instructions',
+    tools: [
+      { type: 'function', name: 'read_mcp_resource', description: 'Read a specific resource from an MCP server.', parameters: { type: 'object' } },
+      { type: 'function', name: 'list_mcp_resources', description: 'List resources provided by MCP servers.', parameters: { type: 'object' } },
+      { type: 'function', name: 'shell', description: 'Run shell', parameters: { type: 'object' } },
+    ],
+  });
+
+  const readResource = result.tools?.find((tool) => tool.function.name === 'read_mcp_resource')?.function.description || '';
+  const listResources = result.tools?.find((tool) => tool.function.name === 'list_mcp_resources')?.function.description || '';
+  const shell = result.tools?.find((tool) => tool.function.name === 'shell')?.function.description;
+  assert.match(readResource, /Only use this for MCP resources returned by list_mcp_resources/);
+  assert.match(readResource, /Do not use it to read arbitrary files or file:\/\/ paths/);
+  assert.match(readResource, /mcp__filesystem__read_text_file/);
+  assert.match(listResources, /Some MCP servers do not implement resources\/list or resources\/read/);
+  assert.equal(shell, 'Run shell');
+});
+
 test('flattens responses namespace tools to chat function tools', () => {
   clearResponseContexts();
   const result = responsesToChat({

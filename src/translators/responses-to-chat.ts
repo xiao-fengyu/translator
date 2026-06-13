@@ -31,18 +31,32 @@ function instructionToSystemMessage(instructions: unknown): ChatMessage[] {
   return content ? [{ role: 'system', content }] : [];
 }
 
+const MCP_RESOURCE_TOOL_GUIDANCE =
+  'Only use this for MCP resources returned by list_mcp_resources. Do not use it to read arbitrary files or file:// paths. For filesystem files, use mcp__filesystem__read_text_file instead. Some MCP servers do not implement resources/list or resources/read.';
+
+function clarifyToolDescription(name: string, description: unknown): string | undefined {
+  const original = typeof description === 'string' ? description.trim() : '';
+  if (name !== 'list_mcp_resources' && name !== 'read_mcp_resource') {
+    return original || undefined;
+  }
+  if (!original) return MCP_RESOURCE_TOOL_GUIDANCE;
+  if (original.includes(MCP_RESOURCE_TOOL_GUIDANCE)) return original;
+  return `${original}\n\n${MCP_RESOURCE_TOOL_GUIDANCE}`;
+}
+
 function responseToolToChatTools(tool: ResponsesTool): ChatTool[] {
   if (tool.type === 'namespace' && typeof tool.name === 'string' && Array.isArray(tool.tools)) {
     return tool.tools.flatMap((innerTool) => {
       const fn = innerTool.function || innerTool;
       const innerName = typeof fn.name === 'string' ? fn.name : '';
       if (!innerName) return [];
+      const name = flattenNamespacedToolName(tool.name!, innerName);
       const freeform = hasFreeformToolShape(innerTool);
       return [{
         type: 'function' as const,
         function: {
-          name: flattenNamespacedToolName(tool.name!, innerName),
-          description: typeof fn.description === 'string' ? fn.description : undefined,
+          name,
+          description: clarifyToolDescription(name, fn.description),
           parameters: freeform ? freeformToolParameters() : fn.parameters || {},
         },
       }];
@@ -57,7 +71,7 @@ function responseToolToChatTools(tool: ResponsesTool): ChatTool[] {
     type: 'function',
     function: {
       name,
-      description: typeof fn.description === 'string' ? fn.description : undefined,
+      description: clarifyToolDescription(name, fn.description),
       parameters: freeform ? freeformToolParameters() : fn.parameters || {},
     },
   }];
@@ -196,4 +210,4 @@ export function responsesToChat(request: ResponsesRequest): ChatCompletionsReque
   return chatRequest;
 }
 
-export const internals = { stringifyContent, inputToMessages, responseToolToChatTools, responseToolChoiceToChatToolChoice, mergePreviousMessages };
+export const internals = { stringifyContent, inputToMessages, responseToolToChatTools, responseToolChoiceToChatToolChoice, mergePreviousMessages, clarifyToolDescription };
