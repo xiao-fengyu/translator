@@ -9,7 +9,8 @@ Codex CLI
   -> https://openclawroot.com/v1/chat/completions
 ```
 
-- 安装手册：[`INSTALL.md`](./INSTALL.md)
+- Linux 安装手册：[`INSTALL.md`](./INSTALL.md)
+- Windows 安装手册：[`WINDOWS-INSTALL.md`](./WINDOWS-INSTALL.md)
 - 使用文档：[`USAGE.md`](./USAGE.md)
 - 本地路径：`/data/translator`
 - GitHub：`https://github.com/xiao-fengyu/translator`

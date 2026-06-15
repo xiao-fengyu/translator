@@ -2,7 +2,7 @@
 
 本文档面向日常使用和故障排查。项目路径：`/data/translator`。
 
-如果你要从 GitHub 在 Linux 上安装，请先看安装手册：[`INSTALL.md`](./INSTALL.md)。
+如果你要从 GitHub 安装，请先看对应安装手册：Linux 见 [`INSTALL.md`](./INSTALL.md)，Windows 见 [`WINDOWS-INSTALL.md`](./WINDOWS-INSTALL.md)。
 
 ## 1. 它是做什么的
 
