@@ -135,13 +135,16 @@ codex exec --ephemeral --skip-git-repo-check -C /tmp 'Reply exactly: pong'
 
 ## 六、更新 translator
 
-进入安装目录：
+进入安装目录后，直接执行升级脚本：
 
 ```bash
 cd translator
+./scripts/upgrade.sh
 ```
 
-拉取最新代码并重装服务：
+脚本会先检查工作区是否干净，再从上游分支快进到最新版本，最后刷新服务。
+
+如果你更想手动执行，也可以继续使用：
 
 ```bash
 git pull --ff-only

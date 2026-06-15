@@ -121,6 +121,16 @@ wire_api = "responses"
 
 ## 七、更新 translator
 
+进入仓库后执行：
+
+```powershell
+.\scripts\upgrade.ps1
+```
+
+脚本会先检查工作区是否干净，再快进到远端最新版本，然后重新安装并启动计划任务。
+
+如果你更想手动执行，也可以继续使用：
+
 ```powershell
 git pull --ff-only
 .\scripts\install.ps1

@@ -85,6 +85,8 @@ Codex CLI
 ├── scripts/
 │   ├── healthcheck.sh
 │   ├── start.sh
+│   ├── upgrade.sh
+│   ├── upgrade.ps1
 │   ├── stop.sh
 │   └── test-codex.sh
 ├── src/
@@ -167,6 +169,24 @@ wire_api = "responses"
 如果需要保留回滚路径，可以暂时保留旧 provider 配置块，但当前主链路应指向 translator。
 
 ## 七、运行与部署
+
+### 0. 自动升级
+
+translator 的自动升级设计为本机运维脚本，而不是 HTTP 服务接口。升级需要拉取 GitHub 代码、安装依赖并重启 systemd 或 Windows 计划任务；这些动作直接暴露成网络接口风险更高，也不利于保护本机运行状态。
+
+Linux：
+
+```bash
+./scripts/upgrade.sh
+```
+
+Windows：
+
+```powershell
+.\scripts\upgrade.ps1
+```
+
+升级脚本会先检查工作区是否干净，再从当前分支的 upstream 快进到最新版本，然后复用安装脚本刷新服务。若本地存在未提交或未跟踪文件，脚本会停止，避免覆盖现场修改。
 
 ### 1. systemd 部署
 
