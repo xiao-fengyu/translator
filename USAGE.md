@@ -32,6 +32,24 @@ translator listening on http://127.0.0.1:3000
 
 不要同时手动启动一份 translator，否则会占用同一个 `3000` 端口。
 
+## 2.1 Linux 一键安装
+
+如果你已经拿到 GitHub 仓库本地副本，直接在仓库根目录执行：
+
+```bash
+./scripts/install.sh
+```
+
+安装脚本会自动：
+
+- 检查 `node`、`npm`、`systemctl`
+- 如果没有 `node_modules`，先执行 `npm install`
+- 如果没有 `.env`，从 `.env.example` 生成
+- 安装并启用 `codex-translator.service`
+- 重启服务并输出状态
+
+如果需要在非 root 用户下安装，先把 `deploy/codex-translator.service` 里的 `@USER@` / `@GROUP@` 改成目标用户，再执行安装脚本。
+
 ## 3. Codex 配置
 
 Codex provider 应指向本地 translator：
@@ -115,6 +133,18 @@ systemctl restart codex-translator.service
 - `stop.sh` 只会停止当前项目目录下的 translator 进程，避免误杀其他 Node 服务。
 
 生产场景优先使用 systemd。
+
+## 5.1 从 GitHub 安装
+
+Linux 用户推荐流程是先 clone 仓库，再一键安装：
+
+```bash
+git clone git@github.com:xiao-fengyu/translator.git
+cd translator
+./scripts/install.sh
+```
+
+如果是首次安装，还需要先编辑 `.env`，填入真实的 `UPSTREAM_BASE_URL` 和 `UPSTREAM_API_KEY`。安装脚本会在没有 `node_modules` 时自动执行 `npm install`。
 
 ## 6. 环境变量
 
