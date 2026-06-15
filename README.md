@@ -9,6 +9,7 @@ Codex CLI
   -> https://openclawroot.com/v1/chat/completions
 ```
 
+- 安装手册：[`INSTALL.md`](./INSTALL.md)
 - 使用文档：[`USAGE.md`](./USAGE.md)
 - 本地路径：`/data/translator`
 - GitHub：`https://github.com/xiao-fengyu/translator`
@@ -432,6 +433,8 @@ git push origin HEAD:main
 - 本次主要变更是将 `README.md` 重新整理为中文归档版
 
 ## 十六、新服务器部署清单
+
+推荐优先参考独立安装手册：[`INSTALL.md`](./INSTALL.md)。
 
 在一台全新的服务器上从零部署 translator，按以下顺序执行：
 

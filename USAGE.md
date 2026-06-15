@@ -2,6 +2,8 @@
 
 本文档面向日常使用和故障排查。项目路径：`/data/translator`。
 
+如果你要从 GitHub 在 Linux 上安装，请先看安装手册：[`INSTALL.md`](./INSTALL.md)。
+
 ## 1. 它是做什么的
 
 translator 是 Codex CLI 的本地协议翻译层：
