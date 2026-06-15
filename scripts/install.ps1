@@ -1,11 +1,11 @@
 param(
   [switch]$SkipInstallDeps,
-  [string]$ProjectRoot = $PSScriptRoot\..,
+  [string]$ProjectRoot,
   [string]$ServiceName = 'codex-translator'
 )
 
 $ErrorActionPreference = 'Stop'
-$ProjectRoot = [System.IO.Path]::GetFullPath($ProjectRoot)
+$ProjectRoot = if ($ProjectRoot) { [System.IO.Path]::GetFullPath($ProjectRoot) } else { [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..')) }
 $EnvPath = Join-Path $ProjectRoot '.env'
 $EnvExamplePath = Join-Path $ProjectRoot '.env.example'
 $NodeExe = 'node'

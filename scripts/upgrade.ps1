@@ -1,10 +1,10 @@
 param(
   [switch]$SkipInstallDeps,
-  [string]$ProjectRoot = $PSScriptRoot\..
+  [string]$ProjectRoot
 )
 
 $ErrorActionPreference = 'Stop'
-$ProjectRoot = [System.IO.Path]::GetFullPath($ProjectRoot)
+$ProjectRoot = if ($ProjectRoot) { [System.IO.Path]::GetFullPath($ProjectRoot) } else { [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..')) }
 
 function Assert-CommandExists([string]$Name) {
   if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
