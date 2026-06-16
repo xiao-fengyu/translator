@@ -136,7 +136,41 @@ git pull --ff-only
 .\scripts\install.ps1
 ```
 
-## 八、卸载
+## 八、同步 Linux 记忆到 Windows Codex
+
+如果 Linux 是主要开发端，Windows 只是测试端，建议把 Linux 的 Codex memory 当作主记忆源，定期同步到 Windows：
+
+```text
+Linux:   /root/.codex-memory/memory.json
+Windows: C:\Users\Administrator\.codex-memory\memory.json
+```
+
+在 Linux 的 translator 仓库里手动同步一次：
+
+```bash
+cd /data/translator
+SSHPASS='your-windows-password' ./scripts/sync-memory-to-windows.sh
+```
+
+默认目标是当前测试机 `Administrator@36.212.8.169`。如果目标机器变化，可以用环境变量覆盖：
+
+```bash
+WINDOWS_HOST=your-windows-host \
+WINDOWS_USER=Administrator \
+WINDOWS_MEMORY_PATH='C:/Users/Administrator/.codex-memory/memory.json' \
+SSHPASS='your-windows-password' \
+./scripts/sync-memory-to-windows.sh
+```
+
+如果要每分钟同步一次，可以在 Linux 上配置 cron：
+
+```cron
+* * * * * cd /data/translator && SSHPASS='your-windows-password' ./scripts/sync-memory-to-windows.sh >> /tmp/codex-memory-sync.log 2>&1
+```
+
+这套同步是单向覆盖：Linux 写入的新记忆会同步到 Windows，Windows 侧如果也写 memory，下一次同步会被 Linux 版本覆盖。这样可以避免两边同时写同一个 `memory.json` 产生冲突。
+
+## 九、卸载
 
 删除计划任务：
 
