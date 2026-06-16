@@ -7,4 +7,3 @@ dist/
 .env.backup*
 translator.pid
 data/
-.codegraph/
