@@ -73,6 +73,23 @@ test('makeResponsesStream emits namespace for flattened mcp tool calls', async (
   assert.match(out, /"call_id":"call_mcp"/);
 });
 
+test('makeResponsesStream normalizes filesystem resource reads with file uri', async () => {
+  const upstream = makeUpstreamSSE([
+    'data: ' + JSON.stringify({ id: 'chatcmpl_1', choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: 'call_mcp_file', type: 'function', function: { name: 'read_mcp_resource', arguments: '' } }] } }] }) + '\n\n',
+    'data: ' + JSON.stringify({ id: 'chatcmpl_1', choices: [{ index: 0, delta: { tool_calls: [{ index: 0, function: { arguments: JSON.stringify({ server: 'filesystem', uri: 'file:///data/e-platform/test-reports/runs/script-checks.json' }) } }] } }] }) + '\n\n',
+    'data: {"id":"chatcmpl_1","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}\n\n',
+    'data: [DONE]\n\n',
+  ]);
+
+  const out = await collectStream(makeResponsesStream(upstream, 'm'));
+
+  assert.match(out, /"namespace":"mcp__filesystem"/);
+  assert.match(out, /"name":"read_text_file"/);
+  assert.match(out, /"call_id":"call_mcp_file"/);
+  assert.match(out, /"arguments":"\{\\"path\\":\\"\/data\/e-platform\/test-reports\/runs\/script-checks\.json\\"\}"/);
+  assert.doesNotMatch(out, /"name":"read_mcp_resource"/);
+});
+
 test('makeResponsesStream maps final apply_patch input to custom tool call', async () => {
   const patch = '*** Begin Patch\n*** Add File: x.txt\n+hi\n*** End Patch';
   const wrapped = JSON.stringify({ input: patch });

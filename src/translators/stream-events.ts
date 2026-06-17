@@ -1,6 +1,7 @@
 import { TextDecoder, TextEncoder } from 'node:util';
 import { splitNamespacedToolName } from './namespaced-tools.ts';
 import { isFreeformToolName, unwrapFreeformArguments } from './freeform-tools.ts';
+import { isFilesystemResourceReadCandidate, normalizeToolCall } from './tool-call-normalizer.ts';
 import {
   makeGenericStreamFailure,
   makeStreamInterruptedError,
@@ -42,7 +43,8 @@ function extractToolCallDeltas(chunk: any): any[] {
 }
 
 function responseToolCallItem(call: StreamToolCallState): any {
-  const splitName = splitNamespacedToolName(call.name || 'unknown_function');
+  const normalized = normalizeToolCall(call.name || 'unknown_function', call.arguments || '');
+  const splitName = splitNamespacedToolName(normalized.name);
   if (isFreeformToolName(splitName.name)) {
     return {
       id: call.id,
@@ -50,7 +52,7 @@ function responseToolCallItem(call: StreamToolCallState): any {
       status: 'completed',
       call_id: call.id,
       ...splitName,
-      input: unwrapFreeformArguments(call.arguments || ''),
+      input: unwrapFreeformArguments(normalized.arguments),
     };
   }
   return {
@@ -59,7 +61,7 @@ function responseToolCallItem(call: StreamToolCallState): any {
     status: 'completed',
     call_id: call.id,
     ...splitName,
-    arguments: call.arguments || '',
+    arguments: normalized.arguments,
   };
 }
 
@@ -181,7 +183,12 @@ export function makeResponsesStream(upstreamBody: ReadableStream<Uint8Array>, mo
               const state = ensureToolCall(index, toolDelta);
               const fn = toolDelta.function || {};
               const argsDelta = typeof fn.arguments === 'string' ? fn.arguments : '';
+              const delayUntilComplete = isFilesystemResourceReadCandidate(state.name);
               if (!state.added) {
+                if (delayUntilComplete) {
+                  if (argsDelta) state.arguments += argsDelta;
+                  continue;
+                }
                 send('response.output_item.added', {
                   type: 'response.output_item.added',
                   output_index: state.outputIndex,
@@ -250,7 +257,19 @@ export function makeResponsesStream(upstreamBody: ReadableStream<Uint8Array>, mo
         }
         for (const state of toolCalls.values()) {
           const item = responseToolCallItem(state);
-          if (!isFreeformToolName(state.name)) {
+          if (!state.added) {
+            send('response.output_item.added', {
+              type: 'response.output_item.added',
+              output_index: state.outputIndex,
+              item: {
+                ...item,
+                status: 'in_progress',
+                ...(item.type === 'custom_tool_call' ? { input: '' } : { arguments: '' }),
+              },
+            });
+            state.added = true;
+          }
+          if (item.type !== 'custom_tool_call') {
             send('response.function_call_arguments.done', {
               type: 'response.function_call_arguments.done',
               item_id: state.id,

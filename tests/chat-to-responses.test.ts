@@ -91,6 +91,38 @@ test('wraps flattened mcp tool calls with responses namespace', () => {
   });
 });
 
+test('normalizes filesystem resource reads with file uri to filesystem text reads', () => {
+  const result = chatToResponses({
+    id: 'chat_mcp_file_1',
+    model: 'm',
+    choices: [{
+      message: {
+        content: null,
+        tool_calls: [{
+          id: 'call_mcp_file_1',
+          type: 'function',
+          function: {
+            name: 'read_mcp_resource',
+            arguments: JSON.stringify({
+              server: 'filesystem',
+              uri: 'file:///data/e-platform/test-reports/runs/script-checks.json',
+            }),
+          },
+        }],
+      },
+    }],
+  }, 'm');
+  assert.deepEqual(result.output[0], {
+    id: 'call_mcp_file_1',
+    type: 'function_call',
+    status: 'completed',
+    call_id: 'call_mcp_file_1',
+    namespace: 'mcp__filesystem',
+    name: 'read_text_file',
+    arguments: JSON.stringify({ path: '/data/e-platform/test-reports/runs/script-checks.json' }),
+  });
+});
+
 test('wraps chat response with both content and tool_calls as message + function_call', () => {
   const result = chatToResponses({
     id: 'chat_mixed_1',

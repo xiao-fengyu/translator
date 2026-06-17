@@ -1,5 +1,6 @@
 import { splitNamespacedToolName } from './namespaced-tools.ts';
 import { isFreeformToolName, unwrapFreeformArguments } from './freeform-tools.ts';
+import { normalizeToolCall } from './tool-call-normalizer.ts';
 function responseId(): string {
   return `resp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
@@ -31,8 +32,10 @@ export function extractChatToolCalls(chatResponse: any): any[] {
 function chatToolCallToResponseOutput(toolCall: any, index: number): any {
   const id = toolCall?.id || `call_${Date.now().toString(36)}_${index}`;
   const fn = toolCall?.function || {};
-  const name = typeof fn.name === 'string' ? fn.name : 'unknown_function';
-  const args = stringifyToolArguments(fn.arguments);
+  const rawName = typeof fn.name === 'string' ? fn.name : 'unknown_function';
+  const normalized = normalizeToolCall(rawName, stringifyToolArguments(fn.arguments));
+  const name = normalized.name;
+  const args = normalized.arguments;
   if (isFreeformToolName(name)) {
     return {
       id,
