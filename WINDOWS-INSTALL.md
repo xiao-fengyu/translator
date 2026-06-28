@@ -25,11 +25,13 @@ $PSVersionTable.PSVersion
 
 ## 二、从 GitHub 安装
 
+**推荐部署路径：`D:\translator`**（避免 C 盘空间问题）
+
 推荐流程：
 
 ```powershell
-git clone git@github.com:xiao-fengyu/translator.git
-cd translator
+git clone git@github.com:xiao-fengyu/translator.git D:\translator
+cd D:\translator
 .\scripts\install.ps1
 ```
 
@@ -46,6 +48,11 @@ cd translator
 ```powershell
 .\scripts\install.ps1
 ```
+
+**重要：** 如果从其他路径（如 `C:\eplatform-test\translator`）迁移，需要：
+1. 更新计划任务脚本 `C:\ProgramData\codex-translator\run.ps1` 中的路径
+2. 杀死占用 3000 端口的旧进程：`Get-Process node | Stop-Process -Force`
+3. 重新启动计划任务
 
 ## 三、配置上游模型
 
@@ -89,7 +96,7 @@ TRANSLATOR_MODELS=your-model-name
 检查健康状态：
 
 ```powershell
-Invoke-WebRequest http://127.0.0.1:3000/healthz | Select-Object -ExpandProperty Content
+Invoke-WebRequest http://127.0.0.1:3000/healthz -UseBasicParsing | Select-Object -ExpandProperty Content
 ```
 
 运行项目测试：
@@ -102,21 +109,30 @@ npm test
 
 ## 六、配置 Codex CLI
 
+**这是与 translator 联动的关键步骤。** 升级 Codex 后需要重新验证。
+
 编辑 Codex 配置文件：
 
 ```powershell
 notepad $HOME\.codex\config.toml
 ```
 
-加入或确认：
+加入或确认以下内容（必须有 `model_provider = "translator"`）：
 
 ```toml
+model = "gpt-5.5"
 model_provider = "translator"
 
 [model_providers.translator]
 name = "Local Responses Translator"
 base_url = "http://127.0.0.1:3000/v1"
 wire_api = "responses"
+```
+
+**验证连接：** 升级 Codex 后，运行简单测试确保连接通畅：
+
+```powershell
+codex exec --ephemeral --skip-git-repo-check -C C:\ "Reply: ok"
 ```
 
 ## 七、更新 translator
@@ -136,7 +152,74 @@ git pull --ff-only
 .\scripts\install.ps1
 ```
 
-## 八、卸载
+## 八、升级 Codex 后的检查清单
+
+当升级 Windows 上的官方 Codex 版本时，执行以下检查：
+
+1. **验证 translator 仍在运行：**
+   ```powershell
+   Get-Process node -ErrorAction SilentlyContinue | Where-Object {$_.CommandLine -like "*translator*"}
+   ```
+
+2. **检查 3000 端口是否被占用：**
+   ```powershell
+   Get-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue
+   ```
+
+3. **重新配置 Codex config.toml：**
+   - 升级可能重置配置，需要重新指定 `model_provider = "translator"`
+
+4. **测试端到端连接：**
+   ```powershell
+   Invoke-WebRequest http://127.0.0.1:3000/healthz -UseBasicParsing
+   codex exec --ephemeral --skip-git-repo-check -C C:\ "Reply: test"
+   ```
+
+## 九、故障排查
+
+### 计划任务返回码 267009
+
+**原因：** 进程启动失败，通常因为依赖缺失或路径错误。
+
+**解决：**
+```powershell
+# 检查 run.ps1 脚本中的路径是否正确
+Get-Content C:\ProgramData\codex-translator\run.ps1
+
+# 手动运行脚本查看具体错误
+& C:\ProgramData\codex-translator\run.ps1
+```
+
+### 3000 端口被占用
+
+**原因：** 旧的 translator 进程或其他服务占用该端口。
+
+**解决：**
+```powershell
+# 查找占用 3000 端口的进程
+$proc = (Get-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue).OwningProcess
+Get-Process -Id $proc
+
+# 杀死进程
+Stop-Process -Id $proc -Force
+```
+
+### Codex 启动时报 MCP 连接错误
+
+**原因：** translator 未运行或 config.toml 中 base_url 指向错误。
+
+**解决：**
+1. 检查 translator 是否运行：`Get-Process node`
+2. 检查 config.toml 中 `base_url = "http://127.0.0.1:3000/v1"`
+3. 测试 translator 健康状态：`Invoke-WebRequest http://127.0.0.1:3000/healthz -UseBasicParsing`
+
+### C 盘空间不足导致安装失败
+
+**原因：** npm install 或其他操作需要临时空间。
+
+**解决：** 从一开始就部署到 D 盘：`D:\translator`
+
+## 十、卸载
 
 删除计划任务：
 
